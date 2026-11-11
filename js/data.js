@@ -5,7 +5,19 @@ const WOV = (window.WOV = window.WOV || {});
 
 // Put your bot username and Mini App short name here after creating them in @BotFather.
 // They are used to build invite links: https://t.me/<BOT_USERNAME>/<APP_NAME>?startapp=ref_<code>
-WOV.CONFIG = { BOT_USERNAME: "warofvictor_bot", APP_NAME: "play" };
+// Supabase: project URL and the publishable (public) key. Server secrets live only in GitHub/Supabase settings.
+WOV.CONFIG = { BOT_USERNAME: "warofvictor_bot", APP_NAME: "play",
+  SUPABASE_URL: "https://ggbvjcdbiqqjwjgyuuqc.supabase.co", SUPABASE_KEY: "sb_publishable_ZbnkHxoI1uOD1NSFzdbAKQ_fG6sgiRO" };
+
+// Telegram Stars packs (the server in supabase/functions/_shared/tg.ts has the same list and is the one that counts)
+WOV.STAR_PACKS = [
+  { id: "cr15", stars: 15, crystals: 100, coins: 0, title: "100 кристалів" },
+  { id: "cr50", stars: 50, crystals: 380, coins: 0, title: "380 кристалів" },
+  { id: "cr100", stars: 100, crystals: 850, coins: 0, title: "850 кристалів", best: true },
+  { id: "cr250", stars: 250, crystals: 2300, coins: 0, title: "2300 кристалів" },
+  { id: "co20", stars: 20, crystals: 0, coins: 25000, title: "25 000 монет" },
+  { id: "pack75", stars: 75, crystals: 400, coins: 40000, title: "Набір командира" },
+];
 
 WOV.ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII"];
 WOV.KIND_NAME = { tank: "Танки", plane: "Літаки", ship: "Кораблі" };

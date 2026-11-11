@@ -237,7 +237,7 @@ function buyVehicle(v) {
 // ---------- shop ----------
 function boxArt(b) { return '<div class="boxart" style="--c:' + b.color + ";--r:" + b.rim + '"><div class="body"></div><div class="lid"></div><div class="band"></div><div class="lock"></div></div>'; }
 let shopTab = "boxes";
-const SHOP_TABS = [["boxes", "Бокси"], ["ammo", "Снаряди"], ["vehicles", "Техніка"], ["camo", "Камуфляж"], ["other", "Інше"]];
+const SHOP_TABS = [["stars", "⭐ Зірки"], ["boxes", "Бокси"], ["ammo", "Снаряди"], ["vehicles", "Техніка"], ["camo", "Камуфляж"], ["other", "Інше"]];
 const shellIco = (a, txt) => '<div class="shell-ico" style="--c:' + a.col + '">' + (txt || a.short) + "</div>";
 const STOCK_ICO = { apcr: { col: "#9fd8ff", short: "ПК" }, inc: { col: "#ff7a3a", short: "ЗАП" }, heavy: { col: "#c9a8ff", short: "НВ" }, repair: { col: "#7fbf6b", short: "РЕМ" } };
 function noMoney(cur) { WOV.haptic("error"); toast(cur === "coins" ? "Не вистачає монет" : "Не вистачає кристалів"); }
@@ -284,7 +284,24 @@ function renderShop() {
   const tabs = $("#shopTabs"); tabs.innerHTML = "";
   for (const [id, label] of SHOP_TABS) { const b = el("button", id === shopTab ? "active" : "", label); b.onclick = () => { shopTab = id; renderShop(); WOV.haptic("select"); }; tabs.appendChild(b); }
   const body = $("#shopBody"); body.innerHTML = "";
-  if (shopTab === "boxes") {
+  if (shopTab === "stars") {
+    const st = el("div", "stars"); body.appendChild(st);
+    for (const pk of WOV.STAR_PACKS) {
+      const c = el("button", "shopitem star" + (pk.best ? " best" : ""), (pk.best ? '<span class="tag">Вигідно</span>' : "") + '<div class="star-ico">' + (pk.coins && !pk.crystals ? ICONS.coin : ICONS.crystal).replace("<svg", '<svg width="38" height="38"') + "</div><b>" + pk.title + "</b>" + (pk.crystals && pk.coins ? "<small>" + fmt(pk.crystals) + " кристалів + " + fmt(pk.coins) + " монет</small>" : "") + '<span class="price">⭐ ' + pk.stars + "</span>");
+      c.onclick = () => {
+        if (!WOV.Net || !WOV.Net.enabled() || !WOV.Net.inTelegram()) { toast("Купівля за зірки працює в Telegram"); return; }
+        c.disabled = true; WOV.haptic("medium");
+        WOV.Net.buy(pk.id, r => {
+          c.disabled = false;
+          if (r.msg) { WOV.haptic("success"); if (A) A.sfx("reward"); toast("Дякуємо! " + r.msg, 3500); renderShop(); }
+          else if (r.status === "paid") toast("Оплату прийнято, нарахуємо за хвилину", 3500);
+          else if (r.error) toast(r.error === "notg" ? "Купівля за зірки працює в Telegram" : "Не вдалося створити рахунок, спробуй пізніше");
+        });
+      };
+      st.appendChild(c);
+    }
+    body.appendChild(el("p", "note", "Оплата зірками Telegram прямо в грі. Кристали й монети нараховуються одразу після оплати."));
+  } else if (shopTab === "boxes") {
     const bx = el("div", "boxes"); body.appendChild(bx);
     for (const b of WOV.BOXES) {
       const c = el("button", "box", boxArt(b) + "<b>" + b.name + "</b><small>" + b.desc + "</small>" + priceHtml("coins", b.price));
@@ -378,8 +395,35 @@ function buyBox(b) {
 }
 
 // ---------- friends ----------
+let lbBy = "xp";
+function leaderSheet() {
+  const tabs = [["xp", "Звання"], ["wins", "Перемоги"], ["kills", "Знищення"]];
+  openSheet('<h2>Таблиця лідерів</h2><div class="sub">Найкращі командири War of Victor</div><div class="chips" id="lbTabs"></div><div class="lb" id="lbList"><div class="empty">Завантаження…</div></div><div class="actions"><button class="btn-sec" id="lbClose">Закрити</button></div>', sh => {
+    sh.querySelector("#lbClose").onclick = closeSheet;
+    const load = () => {
+      const t = sh.querySelector("#lbTabs"); t.innerHTML = "";
+      for (const [id, label] of tabs) { const b = el("button", id === lbBy ? "active" : "", label); b.onclick = () => { lbBy = id; load(); WOV.haptic("select"); }; t.appendChild(b); }
+      const list = sh.querySelector("#lbList");
+      if (!WOV.Net || !WOV.Net.enabled() || !WOV.Net.inTelegram()) { list.innerHTML = '<div class="empty">Таблиця лідерів працює, коли гра відкрита в Telegram.</div>'; return; }
+      list.innerHTML = '<div class="empty">Завантаження…</div>';
+      WOV.Net.top(lbBy).then(r => {
+        if (r.by !== lbBy) return;
+        list.innerHTML = "";
+        const val = x => lbBy === "xp" ? WOV.rank(x.value).r.name : fmt(x.value);
+        r.list.forEach(x => {
+          const row = el("div", "lbrow" + (x.me ? " me" : "") + (x.place <= 3 ? " top" + x.place : ""), '<span class="pl">' + x.place + '</span><b></b><span class="v">' + (lbBy === "xp" ? WOV.rankIcon(WOV.rank(x.value).r, 18) + " " : "") + val(x) + "</span>");
+          row.querySelector("b").textContent = x.name; list.appendChild(row);
+        });
+        if (!r.list.length) list.appendChild(el("div", "empty", "Поки порожньо. Зіграй бій і стань першим!"));
+        if (!r.list.some(x => x.me)) list.appendChild(el("div", "lbrow me", '<span class="pl">' + r.me.place + "</span><b>Ти</b><span class=\"v\">" + val(r.me) + "</span>"));
+      }).catch(() => { list.innerHTML = '<div class="empty">Сервер не відповідає. Спробуй пізніше.</div>'; });
+    };
+    load();
+  });
+}
 function renderFriends() {
   const p = WOV.profile;
+  const lb = $("#lbBtn"); if (lb) lb.onclick = leaderSheet;
   $("#myCode").textContent = p.code; $("#refBonusTxt").textContent = fmt(WOV.REF_BONUS); $("#friendBonusTxt").textContent = fmt(WOV.FRIEND_BONUS);
   const list = $("#friendsList"); list.innerHTML = "";
   $("#friendCount").textContent = p.friends.length ? "· " + p.friends.length : "";
@@ -492,12 +536,31 @@ function renderTasks() {
 }
 
 // ---------- battle flow ----------
-function startBattle() {
-  WOV.haptic("heavy");
+function launch(match) {
+  closeSheet(); delete $("#modal").dataset.lock;
   cancelAnimationFrame(hangarRaf);
   $("#app").classList.add("in-battle");
   if (tg && tg.BackButton) tg.BackButton.show();
-  WOV.Battle.start(mode, showResult);
+  WOV.Battle.start(mode, showResult, match || null);
+}
+let mmCancel = null;
+function startBattle() {
+  WOV.haptic("heavy");
+  if (mode !== "quick" || !WOV.Net || !WOV.Net.enabled()) return launch();
+  // quick battle: look for real players first, fill the rest with bots
+  const v = WOV.currentVehicle(), camo = WOV.camoOf(v);
+  $("#modal").dataset.lock = "1";
+  openSheet('<h2>Пошук гравців</h2><div class="sub">Швидкий бій 4 на 4: живі гравці твого рангу, решта місць боти</div>' +
+    '<div class="mm"><div class="radar"><i></i></div><div><b id="mmCount">Підключення…</b><small id="mmLeft"></small></div></div>' +
+    '<div class="actions"><button class="btn-sec" id="mmCancel">Скасувати</button><button class="btn-main" id="mmBots">Грати з ботами</button></div>', sh => {
+    sh.querySelector("#mmCancel").onclick = () => { if (mmCancel) mmCancel(); mmCancel = null; delete $("#modal").dataset.lock; closeSheet(); };
+    sh.querySelector("#mmBots").onclick = () => { if (mmCancel) mmCancel(); mmCancel = null; launch(); };
+  });
+  mmCancel = WOV.Net.findMatch({ id: WOV.Net.myId, name: WOV.profile.name, vid: v.id, kind: v.kind, tier: v.tier, camo: camo ? camo.id : "" }, {
+    status(n, left) { const c = $("#mmCount"), l = $("#mmLeft"); if (!c) return; c.textContent = n <= 1 ? "Шукаємо суперників…" : "У черзі: " + n + " гравц" + (n < 5 ? "і" : "ів"); l.textContent = left > 0 ? "Старт через " + left + " с" : "Збираємо бій…"; },
+    match(m) { mmCancel = null; WOV.haptic("success"); launch(m); },
+    timeout() { mmCancel = null; if (!$("#modal").classList.contains("hidden") && $("#mmCount")) { toast("Живих гравців зараз немає, бій з ботами"); launch(); } },
+  });
 }
 function askLeave() {
   const go = () => WOV.Battle.leave();
@@ -507,8 +570,9 @@ function askLeave() {
 $("#exitBattle").onclick = askLeave;
 function showResult(s) {
   $("#app").classList.remove("in-battle");
+  if (WOV.Net) WOV.Net.reportBattle(s);
   setTab("hangar");
-  const rows = s.board.map(u => '<tr class="' + (u.me ? "me " : "") + (u.dead ? "dead" : "") + '"><td class="t' + u.team + '">' + escapeHtml(u.name) + '</td><td style="color:var(--muted)">' + u.v + "</td><td>" + u.kills + "</td><td>" + u.dmg + "</td></tr>").join("");
+  const rows = s.board.map(u => '<tr class="' + (u.me ? "me " : "") + (u.dead ? "dead" : "") + '"><td class="t' + u.team + '">' + (u.human && !u.me ? "◆ " : "") + escapeHtml(u.name) + '</td><td style="color:var(--muted)">' + u.v + "</td><td>" + u.kills + "</td><td>" + u.dmg + "</td></tr>").join("");
   openSheet('<div class="result-head ' + s.result + '">' + (s.result === "win" ? "ПЕРЕМОГА" : "ПОРАЗКА") + '</div><div class="sub" style="text-align:center">' + s.mode + (s.survived ? " · вцілів" : " · знищено") + "</div>" +
     '<div class="earn"><div><b id="earnCoins">0</b><small>монет' + (s.boosted ? " ×2" : "") + "</small></div><div><b>" + s.kills + "</b><small>знищено</small></div><div><b>" + s.dmg + "</b><small>шкоди</small></div><div><b>+" + s.xp + "</b><small>досвіду</small></div></div>" +
     progressHtml(s) +
@@ -561,5 +625,7 @@ WOV.load(() => {
   setTab("hangar");
   setTimeout(() => $("#splash").classList.add("gone"), 350);
   if (WOV.pendingToast) setTimeout(() => toast(WOV.pendingToast, 3500), 600);
+  // purchases paid while the game was closed
+  if (WOV.Net) WOV.Net.hello().then(msg => { if (msg) toast("Покупка зарахована: " + msg, 4000); });
 });
 })();
