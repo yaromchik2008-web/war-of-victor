@@ -182,6 +182,7 @@ WOV.FRIEND_BONUS = 1500; WOV.REF_BONUS = 3000; WOV.MAX_FRIEND_REWARDS = 10;
 
 WOV.MODES = {
   quick: { name: "Швидкий бій", desc: "4 на 4 · 3 хв · мала карта · ×0.6 монет", size: 2800, team: 4, time: 180, winBonus: 400, coinMul: 0.6 },
+  conquest: { name: "Захоплення", desc: "5 на 5 · 3 точки · 6 хв · ×0.85 монет", size: 3400, team: 5, time: 360, winBonus: 900, coinMul: 0.85, points: true, tickets: 300 },
   team: { name: "Командний бій", desc: "7 на 7 · 5 хв · велика карта · ×1 монет", size: 4000, team: 7, time: 300, winBonus: 1200, coinMul: 1 },
 };
 })();

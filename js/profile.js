@@ -31,6 +31,8 @@ function fresh() {
     friends: [], friendRewards: 0, refUsed: false,
     stats: { battles: 0, wins: 0, kills: 0, dmg: 0 }, xp: 0, boxesOpened: 0, sound: true, music: true,
     ammo: Object.assign({}, WOV.START_STOCK), ammoSel: { tank: "ap", plane: "mg", ship: "ap" }, giftAt: 0, dealDay: "",
+    rp: {}, resTarget: { tank: null, plane: null, ship: null }, vmods: {}, vbattles: {}, crew: { tank: {}, plane: {}, ship: {} },
+    daily: { day: "", list: [] }, pass: { xp: 0, claimed: [] },
   };
 }
 WOV.profile = fresh();
@@ -44,6 +46,10 @@ function sanitize(p) {
   out.stats = Object.assign(fresh().stats, out.stats || {});
   out.ammo = Object.assign(fresh().ammo, out.ammo || {});
   out.ammoSel = Object.assign(fresh().ammoSel, out.ammoSel || {});
+  for (const k of ["rp", "resTarget", "vmods", "vbattles", "crew", "daily", "pass"]) out[k] = Object.assign(fresh()[k], out[k] || {});
+  for (const k of ["tank", "plane", "ship"]) out.crew[k] = out.crew[k] || {};
+  if (!Array.isArray(out.pass.claimed)) out.pass.claimed = [];
+  if (!Array.isArray(out.daily.list)) out.daily.list = [];
   return out;
 }
 
@@ -99,11 +105,8 @@ WOV.spend = function (cur, amount) {
 WOV.give = function (cur, amount) { WOV.profile[cur] += amount; WOV.save(); WOV.emit && WOV.emit("wallet"); };
 WOV.owns = id => WOV.profile.owned.includes(id);
 // a vehicle can be bought when you own any vehicle of the same class one tier lower
-WOV.canUnlock = function (v) {
-  if (WOV.owns(v.id) || v.prem) return false;
-  if (v.tier === 1) return true;
-  return WOV.VEHICLES.some(o => o.kind === v.kind && o.tier === v.tier - 1 && WOV.owns(o.id));
-};
+// ...and when it has been researched with experience (see progress.js)
+WOV.canUnlock = function (v) { return WOV.researchable(v) && WOV.researched(v); };
 WOV.rank = function (xp) {
   xp = xp === undefined ? WOV.profile.xp : xp;
   const R = WOV.RANKS; let i = 0; while (i + 1 < R.length && xp >= R[i + 1].xp) i++;

@@ -19,6 +19,7 @@ const ICONS = {
   shop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 8h16l-1.5 12h-13z"/><path d="M8 8a4 4 0 018 0"/></svg>',
   sound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>',
   music: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 17.5V5.5l11-2.5v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6.5" cy="17.5" r="2.8"/><circle cx="17.5" cy="15" r="2.8"/></svg>',
+  tasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8.5l1.5 1.5L12 7.5M8 14.5l1.5 1.5 2.5-2.5M14.5 9h2M14.5 15h2"/></svg>',
   friends: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-4 3.4-6 6.5-6s5.7 2 6.5 6"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.2c2.8.1 4.8 1.9 5.5 5.3"/></svg>',
 };
 WOV.ICONS = ICONS;
@@ -58,7 +59,8 @@ function setTab(t) {
   tab = t;
   document.querySelectorAll(".tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === t));
   document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === "scr-" + t));
-  if (t === "hangar") renderHangar(); else if (t === "tree") renderTree(); else if (t === "shop") renderShop(); else renderFriends();
+  if (t === "hangar") renderHangar(); else if (t === "tree") renderTree(); else if (t === "shop") renderShop(); else if (t === "tasks") renderTasks(); else renderFriends();
+  updateTaskDot();
   WOV.haptic("select");
 }
 document.querySelectorAll(".tabbar button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
@@ -78,7 +80,7 @@ function statsOf(v) {
   const max = f => Math.max(...same.map(f));
   const dps = o => o.dmg / o.reload;
   const rows = [
-    ["Швидкість", v.speed + (v.kind === "plane" ? " км/г" : " км/г"), v.speed / max(o => o.speed)],
+    ["Швидкість", Math.round(v.speed) + (v.kind === "plane" ? " км/г" : " км/г"), v.speed / max(o => o.speed)],
     ["Міцність", v.hp, v.hp / max(o => o.hp)],
     ["Вогонь", Math.round(dps(v)) + "/с", dps(v) / max(dps)],
   ];
@@ -98,7 +100,7 @@ function renderHangar() {
   segment($("#hangarCls"), p.cls, k => { p.cls = k; WOV.save(); renderHangar(); });
   $("#hTier").textContent = WOV.ROMAN[v.tier]; $("#hTier").className = "tier" + (v.prem ? " prem" : "");
   $("#hName").textContent = v.name; $("#hMeta").textContent = v.nation + " · " + roleOf(v) + (v.prem ? " · преміум" : "");
-  $("#hStats").innerHTML = statsOf(v);
+  renderHangarStats();
   const owned = WOV.VEHICLES.filter(o => o.kind === p.cls && WOV.owns(o.id)).sort((a, b) => a.tier - b.tier);
   const car = $("#hOwned"); car.innerHTML = "";
   for (const o of owned) {
@@ -117,7 +119,7 @@ function renderHangar() {
   }
   const shopCamo = el("button", "camo", '<span style="display:grid;place-items:center;color:var(--muted);font-size:20px">+</span>'); shopCamo.onclick = () => setTab("shop"); cs.appendChild(shopCamo);
   const ms = $("#modes"); ms.innerHTML = "";
-  for (const id of ["quick", "team"]) {
+  for (const id of ["quick", "conquest", "team"]) {
     const m = WOV.MODES[id], b = el("button", "mode" + (mode === id ? " sel" : ""), "<b>" + m.name + "</b><small>" + m.desc + "</small>");
     b.onclick = () => { mode = id; renderHangar(); WOV.haptic("select"); }; ms.appendChild(b);
   }
@@ -154,16 +156,24 @@ $("#toBattle").onclick = () => startBattle();
 
 // ---------- tech tree ----------
 let treeCls = "tank";
+let treeNat = "all";
+const natBadge = v => { const n = WOV.NATIONS.find(x => x.id === WOV.nationOf(v)); return n ? '<span class="nat" style="background:' + n.col + '">' + n.short + "</span>" : ""; };
 function renderTree() {
   segment($("#treeCls"), treeCls, k => { treeCls = k; renderTree(); });
+  const nats = WOV.NATIONS.filter(n => WOV.VEHICLES.some(v => v.kind === treeCls && WOV.nationOf(v) === n.id));
+  if (treeNat !== "all" && !nats.some(n => n.id === treeNat)) treeNat = "all";
+  const nb = $("#treeNat"); nb.innerHTML = "";
+  for (const n of [{ id: "all", short: "Усі нації" }].concat(nats)) { const b = el("button", n.id === treeNat ? "active" : "", n.id === "all" ? n.short : n.id); b.onclick = () => { treeNat = n.id; renderTree(); }; nb.appendChild(b); }
+  const tgt = WOV.researchTarget(treeCls);
+  $("#treeHint").innerHTML = tgt ? "Досліджується: <b style='color:#9fd8ff'>" + tgt.name + "</b> · " + fmt(WOV.rpOf(tgt)) + " / " + fmt(WOV.rpNeed(tgt)) + " досвіду. Досвід приходить з кожного бою на техніці цього класу. Торкнись іншої машини, щоб досліджувати її." : "Усе доступне в цьому класі досліджено.";
   const tree = $("#tree"); tree.innerHTML = "";
-  const list = WOV.VEHICLES.filter(v => v.kind === treeCls && !v.prem);
+  const list = WOV.VEHICLES.filter(v => v.kind === treeCls && !v.prem && (treeNat === "all" || WOV.nationOf(v) === treeNat));
   for (let t = 1; t <= 7; t++) {
     const row = el("div", "tier-row", '<div class="tier-label">' + WOV.ROMAN[t] + '</div><div class="tier-cards"></div>');
     for (const v of list.filter(v => v.tier === t)) row.lastChild.appendChild(treeCard(v));
     tree.appendChild(row);
   }
-  const prem = WOV.VEHICLES.filter(v => v.kind === treeCls && v.prem);
+  const prem = WOV.VEHICLES.filter(v => v.kind === treeCls && v.prem && (treeNat === "all" || WOV.nationOf(v) === treeNat));
   if (prem.length) {
     const row = el("div", "tier-row", '<div class="tier-label" style="color:var(--purple)">★</div><div class="tier-cards"></div>');
     for (const v of prem) row.lastChild.appendChild(treeCard(v));
@@ -172,13 +182,15 @@ function renderTree() {
 }
 function treeCard(v) {
   const owned = WOV.owns(v.id), avail = WOV.canUnlock(v), sel = WOV.profile.sel[v.kind] === v.id;
-  const cls = "tcard " + (owned ? "owned" : avail ? "avail" : "locked") + (sel ? " sel" : "");
-  let state;
+  const resNow = !owned && !v.prem && WOV.researchable(v) && !WOV.researched(v), isTarget = resNow && WOV.researchTarget(v.kind) === v;
+  const cls = "tcard " + (owned ? "owned" : avail ? "avail" : resNow ? "research" : "locked") + (sel ? " sel" : "");
+  let state, extra = "";
   if (owned) state = sel ? "В АНГАРІ ✓" : "ОТРИМАНО";
   else if (v.prem) state = ICONS.crystal + fmt(v.prem);
   else if (avail) state = ICONS.coin + fmt(WOV.priceOf(v));
+  else if (resNow) { const k = WOV.rpOf(v) / WOV.rpNeed(v); state = "Дослідж. " + Math.floor(k * 100) + "%"; extra = '<div class="rbar"><i style="width:' + Math.round(k * 100) + '%"></i></div>'; }
   else state = ICONS.lock + fmt(WOV.priceOf(v));
-  const c = el("button", cls, "<canvas></canvas><b>" + v.name + "</b><small>" + roleOf(v) + '</small><div class="state">' + state + "</div>");
+  const c = el("button", cls, natBadge(v) + (isTarget ? '<span class="target">🎯</span>' : "") + "<canvas></canvas><b>" + v.name + "</b><small>" + roleOf(v) + '</small><div class="state">' + state + "</div>" + extra);
   c.onclick = () => vehicleSheet(v);
   setTimeout(() => WOV.preview(c.querySelector("canvas"), v, { fill: 0.92, angle: -0.6, tAngle: -0.3 }), 0);
   return c;
@@ -200,12 +212,18 @@ function vehicleSheet(v) {
   if (owned) action = '<button class="btn-main" id="vsSel">' + (p.sel[v.kind] === v.id ? "Вже в ангарі" : "Обрати в ангар") + "</button>";
   else if (v.prem) action = '<button class="btn-main" id="vsBuy">Купити за ' + fmt(v.prem) + " кристалів</button>";
   else if (avail) action = '<button class="btn-main" id="vsBuy">Купити за ' + fmt(WOV.priceOf(v)) + " монет</button>";
+  else if (WOV.researchable(v)) {
+    const isT = WOV.researchTarget(v.kind) === v, k = WOV.rpOf(v) / WOV.rpNeed(v);
+    action = '<div class="res-box" style="width:100%">Дослідження: <b>' + fmt(WOV.rpOf(v)) + " / " + fmt(WOV.rpNeed(v)) + '</b> досвіду<div class="rprog"><i style="width:' + Math.round(k * 100) + '%"></i></div>Після дослідження техніку можна купити за ' + fmt(WOV.priceOf(v)) + " монет.</div>" +
+      (isT ? '<button class="btn-sec" disabled style="width:100%">🎯 Уже досліджується</button>' : '<button class="btn-main" id="vsRes">Досліджувати цю машину</button>');
+  }
   else action = '<button class="btn-sec" disabled style="width:100%">Спершу отримай техніку рангу ' + WOV.ROMAN[v.tier - 1] + "</button>";
-  openSheet('<h2><span class="tier' + (v.prem ? " prem" : "") + '">' + WOV.ROMAN[v.tier] + "</span> " + v.name + '</h2><div class="sub">' + v.nation + " · " + roleOf(v) + "</div>" +
+  openSheet('<h2><span class="tier' + (v.prem ? " prem" : "") + '">' + WOV.ROMAN[v.tier] + "</span> " + v.name + '</h2><div class="sub">' + natBadge(v) + " " + v.nation + " · " + roleOf(v) + "</div>" +
     '<canvas class="big"></canvas><div class="stats">' + statsOf(v) + '</div><div class="actions">' + action + "</div>", s => {
     WOV.preview(s.querySelector("canvas.big"), v, { fill: 0.75, angle: -0.5, tAngle: -0.15, camo: owned ? WOV.camoOf(v) : null });
     const sel = s.querySelector("#vsSel"); if (sel) sel.onclick = () => { p.sel[v.kind] = v.id; p.cls = v.kind; WOV.save(); closeSheet(); setTab("hangar"); toast(v.name + " в ангарі"); };
     const buy = s.querySelector("#vsBuy"); if (buy) buy.onclick = () => buyVehicle(v);
+    const res = s.querySelector("#vsRes"); if (res) res.onclick = () => { p.resTarget[v.kind] = v.id; WOV.save(); WOV.haptic("success"); closeSheet(); toast("Досвід тепер іде на " + v.name); if (tab === "tree") renderTree(); };
   });
 }
 function buyVehicle(v) {
@@ -402,6 +420,77 @@ function copy(text, msg) {
 }
 function fallbackCopy(text, done) { const t = el("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e) {} t.remove(); done(); }
 
+
+// ---------- modifications and crew (hangar buttons) ----------
+function modsSheet() {
+  const v = WOV.currentVehicle(), p = WOV.profile, nb = p.vbattles[v.id] || 0;
+  const rows = WOV.VMODS.map(m => {
+    const has = WOV.hasVmod(v, m.id), open = nb >= m.battles, cost = WOV.vmodCost(m, v);
+    return '<div class="mrow' + (has ? " done" : "") + '"><div><b>' + m.names[v.kind] + "</b><small>" + m.desc + (has ? "" : open ? "" : " · відкриється після " + m.battles + " боїв на цій машині (зараз " + nb + ")") + "</small></div>" +
+      (has ? '<span class="ok">✓ Встановлено</span>' : '<button class="btn-sec" data-mod="' + m.id + '"' + (open ? "" : " disabled") + ">" + ICONS.coin.replace("<svg", '<svg width="14" height="14"') + " " + fmt(cost) + "</button>") + "</div>";
+  }).join("");
+  openSheet('<h2 style="margin:0 0 4px">Модифікації · ' + v.name + '</h2><div class="sub">Модифікації відкриваються боями на цій машині й купуються за монети. Діють тільки на неї.</div><div style="margin-top:12px">' + rows + "</div>", sh => {
+    sh.querySelectorAll("[data-mod]").forEach(b => b.onclick = () => {
+      const m = WOV.VMODS.find(x => x.id === b.dataset.mod), cost = WOV.vmodCost(m, v);
+      if (!WOV.spend("coins", cost)) return noMoney("coins");
+      (p.vmods[v.id] = p.vmods[v.id] || {})[m.id] = true; WOV.save(); WOV.haptic("success"); if (A) A.sfx("coin"); toast(m.names[v.kind] + " встановлено"); modsSheet(); renderHangarStats();
+    });
+  });
+}
+function crewSheet() {
+  const v = WOV.currentVehicle(), p = WOV.profile, k = v.kind;
+  const rows = WOV.CREW.map(c => {
+    const lvl = WOV.crewLvl(k, c.id), max = lvl >= WOV.CREW_MAX, cost = WOV.crewCost(lvl);
+    let pips = ""; for (let i = 0; i < WOV.CREW_MAX; i++) pips += "<i" + (i < lvl ? ' class="on"' : "") + "></i>";
+    return '<div class="mrow"><div><b>' + c.name + " · " + lvl + "/" + WOV.CREW_MAX + "</b><small>" + c.desc + '</small><div class="pips">' + pips + "</div></div>" +
+      (max ? '<span class="ok">Макс.</span>' : '<button class="btn-sec" data-crew="' + c.id + '">' + ICONS.coin.replace("<svg", '<svg width="14" height="14"') + " " + fmt(cost) + "</button>") + "</div>";
+  }).join("");
+  openSheet('<h2 style="margin:0 0 4px">Екіпаж · ' + WOV.KIND_NAME[k] + '</h2><div class="sub">Навички екіпажу діють на всю техніку цього класу.</div><div style="margin-top:12px">' + rows + "</div>", sh => {
+    sh.querySelectorAll("[data-crew]").forEach(b => b.onclick = () => {
+      const id = b.dataset.crew, lvl = WOV.crewLvl(k, id), cost = WOV.crewCost(lvl);
+      if (!WOV.spend("coins", cost)) return noMoney("coins");
+      p.crew[k][id] = lvl + 1; WOV.save(); WOV.haptic("success"); if (A) A.sfx("coin"); crewSheet(); renderHangarStats();
+    });
+  });
+}
+function renderHangarStats() { const v = WOV.currentVehicle(); $("#hStats").innerHTML = statsOf(WOV.battleStats(v), v); }
+$("#hMods").onclick = modsSheet;
+$("#hCrew").onclick = crewSheet;
+
+// ---------- tasks and battle pass ----------
+const passIcon = r => r.type === "coins" ? "🪙" : r.type === "crystals" ? "💎" : r.type === "box" ? "📦" : r.type === "camo" ? "🎨" : r.type === "vehicle" ? "⭐" : "💥";
+const passText = r => r.type === "coins" || r.type === "crystals" ? fmt(r.amount) : r.type === "box" ? (WOV.BOXES.find(b => b.id === r.id) || {}).name : r.type === "camo" ? "камуфляж" : r.type === "vehicle" ? WOV.byId[r.id].name : "×" + r.amount;
+function updateTaskDot() {
+  const p = WOV.profile, ready = WOV.dailyTasks().some(t => !t.claimed && t.got >= t.n), lvl = WOV.passLevel();
+  let pass = false; for (let i = 1; i <= lvl; i++) if (!p.pass.claimed.includes(i)) { pass = true; break; }
+  $("#tasksDot").classList.toggle("hidden", !(ready || pass));
+}
+function renderTasks() {
+  const p = WOV.profile, list = WOV.dailyTasks(), left = WOV.taskTimeLeft();
+  $("#taskTimer").textContent = "· нові через " + Math.floor(left / 3600e3) + " год " + Math.floor((left % 3600e3) / 60e3) + " хв";
+  const dl = $("#dailyList"); dl.innerHTML = "";
+  list.forEach((t, i) => {
+    const done = t.got >= t.n, c = el("div", "task" + (t.claimed ? " claimed" : done ? " done" : ""), "<div><b>" + t.text + "</b><br><small>" + fmt(t.got) + " / " + fmt(t.n) + " · нагорода " + fmt(t.reward) + " монет і 150 очок пропуску</small></div>" +
+      (t.claimed ? '<span class="ok" style="color:var(--good);font-weight:800">✓</span>' : done ? '<button class="btn-main" style="width:auto;padding:8px 14px">Забрати</button>' : "<span></span>") + '<div class="rprog"><i style="width:' + Math.round(Math.min(1, t.got / t.n) * 100) + '%"></i></div>');
+    const b = c.querySelector("button"); if (b) b.onclick = () => { if (WOV.claimTask(i)) { WOV.haptic("success"); if (A) A.sfx("reward"); toast("+" + fmt(t.reward) + " монет"); renderTasks(); updateTaskDot(); } };
+    dl.appendChild(c);
+  });
+  const S = WOV.SEASON, lvl = WOV.passLevel(), xpIn = p.pass.xp - lvl * S.perLevel, days = Math.max(0, Math.ceil((S.ends - Date.now()) / 864e5));
+  $("#passHead").innerHTML = "<b>" + S.name + "</b><small>Рівень " + lvl + " з " + S.levels + " · до кінця сезону " + days + " дн. Очки пропуску дають бої і щоденні завдання.</small>" +
+    (lvl < S.levels ? '<div class="rprog"><i style="width:' + Math.round(xpIn / S.perLevel * 100) + '%"></i></div><small>' + xpIn + " / " + S.perLevel + " до рівня " + (lvl + 1) + "</small>" : "");
+  const pl = $("#passList"); pl.innerHTML = "";
+  for (let i = 1; i <= S.levels; i++) {
+    const r = WOV.passReward(i), reach = i <= lvl, claimed = p.pass.claimed.includes(i);
+    const c = el("button", "plvl" + (claimed ? " claimed" : reach ? " reach" : "") + (i % 10 === 0 ? " big" : ""), '<span class="n">' + i + '</span><span class="r">' + passIcon(r) + "</span><span>" + (claimed ? "✓" : passText(r)) + "</span>");
+    c.onclick = () => {
+      if (claimed) return;
+      if (!reach) { toast("Відкриється на рівні " + i + " пропуску"); return; }
+      const text = WOV.claimPass(i); if (text) { WOV.haptic("success"); if (A) A.sfx("reward"); toast(text, 2600); renderTasks(); updateTaskDot(); }
+    };
+    pl.appendChild(c);
+  }
+}
+
 // ---------- battle flow ----------
 function startBattle() {
   WOV.haptic("heavy");
@@ -422,6 +511,7 @@ function showResult(s) {
   const rows = s.board.map(u => '<tr class="' + (u.me ? "me " : "") + (u.dead ? "dead" : "") + '"><td class="t' + u.team + '">' + escapeHtml(u.name) + '</td><td style="color:var(--muted)">' + u.v + "</td><td>" + u.kills + "</td><td>" + u.dmg + "</td></tr>").join("");
   openSheet('<div class="result-head ' + s.result + '">' + (s.result === "win" ? "ПЕРЕМОГА" : "ПОРАЗКА") + '</div><div class="sub" style="text-align:center">' + s.mode + (s.survived ? " · вцілів" : " · знищено") + "</div>" +
     '<div class="earn"><div><b id="earnCoins">0</b><small>монет' + (s.boosted ? " ×2" : "") + "</small></div><div><b>" + s.kills + "</b><small>знищено</small></div><div><b>" + s.dmg + "</b><small>шкоди</small></div><div><b>+" + s.xp + "</b><small>досвіду</small></div></div>" +
+    progressHtml(s) +
     (s.rankUp ? '<div class="rank-up"><span class="avatar' + (s.rankUp.ins === "gen" ? " gen" : "") + '">' + WOV.rankIcon(s.rankUp, 30) + "</span><div><small>Нове звання!</small><b>" + s.rankUp.name + "</b><small>+" + fmt(s.rankUp.reward.coins) + " монет" + (s.rankUp.reward.crystals ? " і +" + s.rankUp.reward.crystals + " кристалів" : "") + "</small></div></div>" : "") +
     '<table class="board"><tr style="color:var(--muted)"><td>Гравець</td><td>Техніка</td><td>✕</td><td>Шкода</td></tr>' + rows + "</table>" +
     '<div class="actions"><button class="btn-sec" id="resClose">В ангар</button><button class="btn-main" id="resAgain">Ще бій</button></div>', sh => {
@@ -431,6 +521,16 @@ function showResult(s) {
     sh.querySelector("#resClose").onclick = closeSheet;
     sh.querySelector("#resAgain").onclick = () => { closeSheet(); startBattle(); };
   });
+}
+function progressHtml(s) {
+  const g = s.progress || {}, out = [];
+  if (s.repair) out.push("🔧 Ремонт техніки: <b>−" + fmt(s.repair) + "</b> монет (уже враховано)");
+  if (g.rp) { const t = WOV.researchTarget(WOV.byId[s.vehicleId].kind); out.push("🔬 Досвід на дослідження: <b>+" + fmt(g.rp) + "</b>" + (t ? " · " + t.name + " " + Math.floor(WOV.rpOf(t) / WOV.rpNeed(t) * 100) + "%" : "")); }
+  for (const v of g.researched || []) out.push("✅ Досліджено: <b>" + v.name + "</b>, можна купити в дереві техніки");
+  for (const t of g.finished || []) out.push("📋 Завдання виконано, забери нагороду у вкладці «Завдання»");
+  if (g.passUp) out.push("🎖 Бойовий пропуск: рівень <b>" + g.passUp + "</b>");
+  if (s.caps) out.push("🚩 Захоплено точок: <b>" + s.caps + "</b>");
+  return out.map(x => '<div class="res-line">' + x + "</div>").join("");
 }
 const escapeHtml = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
