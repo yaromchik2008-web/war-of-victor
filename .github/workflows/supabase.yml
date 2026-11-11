@@ -29,9 +29,9 @@ jobs:
             if [ -z "${!v}" ]; then echo "::error::$v is not set in the repository settings"; exit 1; fi
           done
       - name: Link project
-        run: supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+        run: supabase link --project-ref "$PROJECT_REF"
       - name: Database tables
-        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
+        run: yes | supabase db push --remote --password "$SUPABASE_DB_PASSWORD"
       - name: Function secrets
         run: supabase secrets set --project-ref "$PROJECT_REF" BOT_TOKEN="$BOT_TOKEN" GAME_URL="$GAME_URL"
       - name: Functions
