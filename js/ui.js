@@ -39,10 +39,16 @@ function renderWallet() {
   if (lastCoins !== null && lastCoins !== p.coins) bump(".pill.coins");
   if (lastCr !== null && lastCr !== p.crystals) bump(".pill.crystals");
   lastCoins = p.coins; lastCr = p.crystals;
-  const L = WOV.level();
-  $("#pname").textContent = p.name; $("#avatar").textContent = (p.name[0] || "К").toUpperCase();
-  $("#plvl").textContent = "Рів. " + L.lvl; $("#pxp").style.width = Math.round(L.cur / L.need * 100) + "%";
+  const R = WOV.rank();
+  $("#pname").textContent = p.name; $("#avatar").innerHTML = WOV.rankIcon(R.r, 30); $("#avatar").classList.toggle("gen", R.r.ins === "gen");
+  $("#plvl").textContent = R.r.name; $("#pxp").style.width = Math.round(R.frac * 100) + "%";
 }
+// rank ladder sheet (tap on the player chip)
+$("#playerChip").onclick = () => {
+  const R = WOV.rank(), xp = WOV.profile.xp;
+  const rows = WOV.RANKS.map(r => '<div class="rank-row' + (r.i === R.r.i ? " cur" : r.xp <= xp ? " done" : "") + '"><span class="avatar' + (r.ins === "gen" ? " gen" : "") + '">' + WOV.rankIcon(r, 24) + "</span><div><b>" + r.name + "</b><small>" + fmt(r.xp) + " досвіду" + (r.i ? " · нагорода " + fmt(r.reward.coins) + " монет" + (r.reward.crystals ? " + " + r.reward.crystals + " кристалів" : "") : "") + "</small></div></div>").join("");
+  openSheet('<h2 style="margin:0 0 4px">Військові звання</h2><div class="sub">Досвід дають бої: чим краще граєш, тим швидше росте звання. ' + (R.next ? "До звання «" + R.next.name + "» ще " + fmt(R.next.xp - xp) + " досвіду." : "Ти досяг найвищого звання!") + '</div><div class="ranks">' + rows + "</div>", sh => { const c = sh.querySelector(".rank-row.cur"); c && c.scrollIntoView({ block: "center" }); });
+};
 function bump(sel) { const e = $(sel); e.classList.remove("bump"); void e.offsetWidth; e.classList.add("bump"); }
 WOV.on("wallet", () => { renderWallet(); });
 
@@ -367,11 +373,12 @@ function renderFriends() {
     list.appendChild(row);
   }
   const s = p.stats, wr = s.battles ? Math.round(s.wins / s.battles * 100) : 0;
-  $("#myStats").innerHTML = "<div><b>" + s.battles + "</b><small>боїв</small></div><div><b>" + wr + "%</b><small>перемог</small></div><div><b>" + s.kills + "</b><small>знищено</small></div><div><b>" + WOV.level().lvl + "</b><small>рівень</small></div>";
+  $("#myStats").innerHTML = "<div><b>" + s.battles + "</b><small>боїв</small></div><div><b>" + wr + "%</b><small>перемог</small></div><div><b>" + s.kills + "</b><small>знищено</small></div><div><b style='font-size:13px'>" + WOV.rank().r.name + "</b><small>звання</small></div>";
 }
-$("#copyCode").onclick = () => copy(WOV.inviteLink(), "Посилання-запрошення скопійовано");
+$("#copyCode").onclick = () => { const l = WOV.inviteLink(); copy(l || WOV.profile.code, l ? "Посилання-запрошення скопійовано" : "Код скопійовано"); };
 $("#inviteBtn").onclick = () => {
   const link = WOV.inviteLink(), text = "Го в War of Victor! Танки, літаки й кораблі в одному бою. Мій код: " + WOV.profile.code;
+  if (!link) { copy(text, "Код скопійовано: надішли його другу"); return; }
   const share = "https://t.me/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent(text);
   if (tg && tg.openTelegramLink) { try { tg.openTelegramLink(share); return; } catch (e) {} }
   copy(link + "\n" + text, "Запрошення скопійовано: надішли його другу");
@@ -415,6 +422,7 @@ function showResult(s) {
   const rows = s.board.map(u => '<tr class="' + (u.me ? "me " : "") + (u.dead ? "dead" : "") + '"><td class="t' + u.team + '">' + escapeHtml(u.name) + '</td><td style="color:var(--muted)">' + u.v + "</td><td>" + u.kills + "</td><td>" + u.dmg + "</td></tr>").join("");
   openSheet('<div class="result-head ' + s.result + '">' + (s.result === "win" ? "ПЕРЕМОГА" : "ПОРАЗКА") + '</div><div class="sub" style="text-align:center">' + s.mode + (s.survived ? " · вцілів" : " · знищено") + "</div>" +
     '<div class="earn"><div><b id="earnCoins">0</b><small>монет' + (s.boosted ? " ×2" : "") + "</small></div><div><b>" + s.kills + "</b><small>знищено</small></div><div><b>" + s.dmg + "</b><small>шкоди</small></div><div><b>+" + s.xp + "</b><small>досвіду</small></div></div>" +
+    (s.rankUp ? '<div class="rank-up"><span class="avatar' + (s.rankUp.ins === "gen" ? " gen" : "") + '">' + WOV.rankIcon(s.rankUp, 30) + "</span><div><small>Нове звання!</small><b>" + s.rankUp.name + "</b><small>+" + fmt(s.rankUp.reward.coins) + " монет" + (s.rankUp.reward.crystals ? " і +" + s.rankUp.reward.crystals + " кристалів" : "") + "</small></div></div>" : "") +
     '<table class="board"><tr style="color:var(--muted)"><td>Гравець</td><td>Техніка</td><td>✕</td><td>Шкода</td></tr>' + rows + "</table>" +
     '<div class="actions"><button class="btn-sec" id="resClose">В ангар</button><button class="btn-main" id="resAgain">Ще бій</button></div>', sh => {
     const e = sh.querySelector("#earnCoins"), t0 = performance.now();

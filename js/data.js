@@ -140,6 +140,16 @@ WOV.BOOST = WOV.BOOSTS[0];
 WOV.EXCHANGES = [{ crystals: 10, coins: 1000 }, { crystals: 50, coins: 5500 }, { crystals: 150, coins: 18000 }];
 WOV.EXCHANGE = WOV.EXCHANGES[0];
 
+// ---------- military ranks (replace plain levels); xp = total experience needed ----------
+// ins: insignia type + count. bar = soldier stripes, chev = sergeant chevrons, star = junior officer, big = senior officer, gen = general
+WOV.RANKS = [
+  ["Рекрут", 0, "bar", 0], ["Солдат", 400, "bar", 1], ["Старший солдат", 1000, "bar", 2],
+  ["Молодший сержант", 1900, "chev", 1], ["Сержант", 3000, "chev", 2], ["Старший сержант", 4500, "chev", 3], ["Головний сержант", 6400, "chev", 4], ["Штаб-сержант", 8800, "chev", 5],
+  ["Молодший лейтенант", 11800, "star", 1], ["Лейтенант", 15500, "star", 2], ["Старший лейтенант", 20000, "star", 3], ["Капітан", 25500, "star", 4],
+  ["Майор", 32000, "big", 1], ["Підполковник", 40000, "big", 2], ["Полковник", 50000, "big", 3],
+  ["Бригадний генерал", 63000, "gen", 1], ["Генерал-майор", 80000, "gen", 2], ["Генерал-лейтенант", 100000, "gen", 3], ["Генерал", 125000, "gen", 4],
+].map(([name, xp, ins, n], i) => ({ i, name, xp, ins, n, reward: { coins: 300 + i * 250, crystals: i >= 8 ? 10 + (i - 8) * 5 : 0 } }));
+
 // ---------- ammunition ----------
 // dmg/speed are multipliers of the vehicle's gun; pen > 0 helps through armour, < 0 hurts;
 // splash = blast radius; mod/fire = multipliers for module damage and fire chance; stock = premium ammo bought in the shop
@@ -171,7 +181,7 @@ WOV.DAILY_GIFT = { hours: 20, coins: [300, 900], crystalsChance: 0.35, crystals:
 WOV.FRIEND_BONUS = 1500; WOV.REF_BONUS = 3000; WOV.MAX_FRIEND_REWARDS = 10;
 
 WOV.MODES = {
-  quick: { name: "Швидкий бій", desc: "4 на 4 · 3 хв · мала карта", size: 2800, team: 4, time: 180, winBonus: 500 },
-  team: { name: "Командний бій", desc: "7 на 7 · 5 хв · велика карта", size: 4000, team: 7, time: 300, winBonus: 1200 },
+  quick: { name: "Швидкий бій", desc: "4 на 4 · 3 хв · мала карта · ×0.6 монет", size: 2800, team: 4, time: 180, winBonus: 400, coinMul: 0.6 },
+  team: { name: "Командний бій", desc: "7 на 7 · 5 хв · велика карта · ×1 монет", size: 4000, team: 7, time: 300, winBonus: 1200, coinMul: 1 },
 };
 })();

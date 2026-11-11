@@ -87,7 +87,7 @@ function handleReferral() {
 WOV.inviteLink = function () {
   const c = WOV.CONFIG, code = WOV.profile.code;
   if (c.BOT_USERNAME) return "https://t.me/" + c.BOT_USERNAME + "/" + c.APP_NAME + "?startapp=ref_" + code;
-  return location.origin + location.pathname + "?ref=" + code;
+  return null; // bot username not configured yet
 };
 
 // ---------- economy helpers ----------
@@ -103,6 +103,26 @@ WOV.canUnlock = function (v) {
   if (WOV.owns(v.id) || v.prem) return false;
   if (v.tier === 1) return true;
   return WOV.VEHICLES.some(o => o.kind === v.kind && o.tier === v.tier - 1 && WOV.owns(o.id));
+};
+WOV.rank = function (xp) {
+  xp = xp === undefined ? WOV.profile.xp : xp;
+  const R = WOV.RANKS; let i = 0; while (i + 1 < R.length && xp >= R[i + 1].xp) i++;
+  const next = R[i + 1] || null;
+  return { r: R[i], next, cur: xp - R[i].xp, need: next ? next.xp - R[i].xp : 1, frac: next ? (xp - R[i].xp) / (next.xp - R[i].xp) : 1 };
+};
+// insignia as an SVG string (shoulder-board style)
+WOV.rankIcon = function (r, size) {
+  size = size || 30; const n = r.n, c = r.ins === "gen" ? "#3a2a08" : "#1d1a10";
+  let g = "";
+  if (r.ins === "bar") { if (!n) g = '<circle cx="12" cy="12" r="2.5" fill="' + c + '"/>'; for (let k = 0; k < n; k++) g += '<rect x="5" y="' + (10 - (n - 1) * 2.5 + k * 5) + '" width="14" height="3" rx="1" fill="' + c + '"/>'; }
+  else if (r.ins === "chev") { for (let k = 0; k < n; k++) { const y = 6 + k * (12 / Math.max(1, n)) + (n === 1 ? 4 : 0); g += '<path d="M5 ' + (y + 4) + 'L12 ' + y + 'L19 ' + (y + 4) + '" fill="none" stroke="' + c + '" stroke-width="2.2" stroke-linejoin="round"/>'; } }
+  else {
+    const big = r.ins !== "star", rad = big ? 3.6 : 2.6, pos = { 1: [[12, 12]], 2: [[12, 7.5], [12, 16.5]], 3: [[12, 6], [8, 15], [16, 15]], 4: [[12, 5], [12, 12], [8, 18], [16, 18]] }[n];
+    const star = (x, y, R) => { let d = ""; for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? R * 0.45 : R; d += (k ? "L" : "M") + (x + Math.cos(a) * rr).toFixed(2) + " " + (y + Math.sin(a) * rr).toFixed(2); } return '<path d="' + d + 'Z" fill="' + c + '"/>'; };
+    for (const [x, y] of pos) g += star(x, y, rad);
+    if (r.ins === "gen") g = '<path d="M3 21c3-1 5-3 6-6M21 21c-3-1-5-3-6-6" stroke="' + c + '" stroke-width="1.2" fill="none" opacity=".6"/>' + g;
+  }
+  return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '">' + g + "</svg>";
 };
 WOV.level = function () { const xp = WOV.profile.xp; let lvl = 1, need = 500, acc = 0; while (xp >= acc + need) { acc += need; lvl++; need = Math.round(need * 1.25); } return { lvl, cur: xp - acc, need }; };
 WOV.currentVehicle = function () { const p = WOV.profile; return WOV.byId[p.sel[p.cls]]; };
