@@ -30,6 +30,7 @@ function fresh() {
     camos: ["base"], camoSel: {}, boost: 0,
     friends: [], friendRewards: 0, refUsed: false,
     stats: { battles: 0, wins: 0, kills: 0, dmg: 0 }, xp: 0, boxesOpened: 0, sound: true, music: true,
+    ammo: Object.assign({}, WOV.START_STOCK), ammoSel: { tank: "ap", plane: "mg", ship: "ap" }, giftAt: 0, dealDay: "",
   };
 }
 WOV.profile = fresh();
@@ -41,6 +42,8 @@ function sanitize(p) {
   for (const s of WOV.STARTERS) if (!out.owned.includes(s)) out.owned.push(s);
   for (const k of ["tank", "plane", "ship"]) if (!out.sel[k] || !out.owned.includes(out.sel[k])) out.sel[k] = WOV.STARTERS[["tank", "plane", "ship"].indexOf(k)];
   out.stats = Object.assign(fresh().stats, out.stats || {});
+  out.ammo = Object.assign(fresh().ammo, out.ammo || {});
+  out.ammoSel = Object.assign(fresh().ammoSel, out.ammoSel || {});
   return out;
 }
 
@@ -109,8 +112,8 @@ WOV.camoOf = function (v) { const id = WOV.profile.camoSel[v.id] || "base"; retu
 WOV.openBox = function (box) {
   const r = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
   const p = WOV.profile, out = [];
-  const cr = r(box.crystals[0], box.crystals[1]); p.crystals += cr; out.push({ type: "crystals", amount: cr });
-  const co = Math.round(r(box.coins[0], box.coins[1]) / 10) * 10; p.coins += co; out.push({ type: "coins", amount: co });
+  const cr = r(box.crystals[0], box.crystals[1]); p.crystals += cr; if (cr > 0) out.push({ type: "crystals", amount: cr });
+  const co = Math.round(r(box.coins[0], box.coins[1]) / 10) * 10; p.coins += co; if (co > 0) out.push({ type: "coins", amount: co });
   if (Math.random() < box.camo) {
     const notOwned = WOV.CAMOS.filter(c => c.price > 0 && !p.camos.includes(c.id));
     if (notOwned.length) { const c = notOwned[Math.floor(Math.random() * notOwned.length)]; p.camos.push(c.id); out.push({ type: "camo", id: c.id, label: c.name }); }
@@ -121,6 +124,14 @@ WOV.openBox = function (box) {
     else { const extra = r(80, 200); p.crystals += extra; out.push({ type: "crystals", amount: extra, note: "замість дубліката" }); }
   }
   if (Math.random() < box.boost) { p.boost += 3; out.push({ type: "boost", amount: 3 }); }
+  if (box.ammo) {
+    const n = r(box.ammo[0], box.ammo[1]), keys = Object.keys(WOV.STOCK);
+    for (let i = 0; i < n; i++) {
+      const k = keys[Math.floor(Math.random() * keys.length)], st = WOV.STOCK[k], amt = Math.max(1, Math.round(st.packs[0].n * (0.25 + Math.random() * 0.35)));
+      p.ammo[k] = (p.ammo[k] || 0) + amt;
+      const prev = out.find(o => o.type === "ammo" && o.id === k); if (prev) prev.amount += amt; else out.push({ type: "ammo", id: k, amount: amt, label: st.name });
+    }
+  }
   p.boxesOpened++;
   WOV.save(); WOV.emit && WOV.emit("wallet");
   return out;

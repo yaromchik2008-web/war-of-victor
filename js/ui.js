@@ -101,6 +101,7 @@ function renderHangar() {
     car.appendChild(c); WOV.preview(c.querySelector("canvas"), o, { fill: 0.9, angle: -0.5, tAngle: -0.2, camo: WOV.camoOf(o) });
   }
   const add = el("button", "vcard add", "+ Нова<br>техніка"); add.onclick = () => { treeCls = p.cls; setTab("tree"); }; car.appendChild(add);
+  renderAmmoRow(v);
   const cs = $("#hCamos"); cs.innerHTML = "";
   for (const cm of WOV.CAMOS.filter(c => p.camos.includes(c.id))) {
     const b = el("button", "camo" + (WOV.camoOf(v).id === cm.id ? " sel" : ""), "<span></span>");
@@ -123,6 +124,21 @@ function renderHangar() {
     hangarRaf = requestAnimationFrame(spinStage);
   };
   spinStage();
+}
+function renderAmmoRow(v) {
+  const p = WOV.profile, row = $("#hAmmo"); row.innerHTML = "";
+  const list = WOV.AMMO[v.kind]; let sel = list.find(a => a.id === p.ammoSel[v.kind]) || list[0];
+  for (const a of list) {
+    const left = a.limit ? a.limit + " на бій" : a.stock ? "запас " + fmt(p.ammo[a.stock] || 0) : "безліміт";
+    const none = a.stock && !(p.ammo[a.stock] > 0);
+    const b = el("button", "ammo" + (a === sel ? " sel" : "") + (none ? " none" : ""), shellIco(a) + "<b>" + a.name + "</b><small>" + left + "</small>");
+    b.onclick = () => {
+      if (none) { shopTab = "ammo"; setTab("shop"); toast(a.name + ": купи в розділі «Снаряди»"); return; }
+      p.ammoSel[v.kind] = a.id; WOV.save(); WOV.haptic("select"); renderAmmoRow(v);
+    };
+    row.appendChild(b);
+  }
+  $("#hAmmoDesc").textContent = "Стартовий снаряд: " + sel.name + ". " + sel.desc;
 }
 function swatchBg(cm, v) {
   const c = cm.colors || [v ? v.look.color : "#6f7d4f", "#555", "#777"];
@@ -196,39 +212,112 @@ function buyVehicle(v) {
 
 // ---------- shop ----------
 function boxArt(b) { return '<div class="boxart" style="--c:' + b.color + ";--r:" + b.rim + '"><div class="body"></div><div class="lid"></div><div class="band"></div><div class="lock"></div></div>'; }
+let shopTab = "boxes";
+const SHOP_TABS = [["boxes", "Бокси"], ["ammo", "Снаряди"], ["vehicles", "Техніка"], ["camo", "Камуфляж"], ["other", "Інше"]];
+const shellIco = (a, txt) => '<div class="shell-ico" style="--c:' + a.col + '">' + (txt || a.short) + "</div>";
+const STOCK_ICO = { apcr: { col: "#9fd8ff", short: "ПК" }, inc: { col: "#ff7a3a", short: "ЗАП" }, heavy: { col: "#c9a8ff", short: "НВ" }, repair: { col: "#7fbf6b", short: "РЕМ" } };
+function noMoney(cur) { WOV.haptic("error"); toast(cur === "coins" ? "Не вистачає монет" : "Не вистачає кристалів"); }
+const todayKey = () => { const d = new Date(); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); };
+// one discounted item per day (same for the whole day), chosen from things the player does not own yet
+function dailyDeal() {
+  const p = WOV.profile, pool = [];
+  for (const v of WOV.VEHICLES) if (v.prem && !WOV.owns(v.id)) pool.push({ type: "vehicle", v, full: v.prem });
+  for (const c of WOV.CAMOS) if (c.price > 0 && !p.camos.includes(c.id)) pool.push({ type: "camo", c, full: c.price });
+  if (!pool.length) return null;
+  let h = 0; for (const ch of todayKey()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const d = pool[h % pool.length]; d.price = Math.round(d.full * 0.7); return d;
+}
+function renderShopTop() {
+  const p = WOV.profile, top = $("#shopTop"); top.innerHTML = "";
+  const G = WOV.DAILY_GIFT, wait = p.giftAt + G.hours * 3600e3 - Date.now(), ready = wait <= 0;
+  const gift = el("button", "promo gift" + (ready ? " ready" : ""), "<small>Щоденний подарунок</small><b>" + (ready ? "Забери безкоштовно!" : "Наступний через") + "</b><div class='sub'>" + (ready ? "Монети і шанс на кристали" : Math.floor(Math.ceil(wait / 60e3) / 60) + " год " + (Math.ceil(wait / 60e3) % 60) + " хв") + "</div>" + (ready ? '<span class="price" style="color:var(--good)">Забрати</span>' : ""));
+  gift.onclick = () => {
+    if (!ready) { toast("Подарунок ще готується"); return; }
+    const r = (a, b) => Math.floor(a + Math.random() * (b - a + 1)), co = Math.round(r(G.coins[0], G.coins[1]) / 10) * 10;
+    let msg = "+" + fmt(co) + " монет"; p.coins += co;
+    if (Math.random() < G.crystalsChance) { const cr = r(G.crystals[0], G.crystals[1]); p.crystals += cr; msg += " і +" + cr + " кристалів"; }
+    p.giftAt = Date.now(); WOV.save(); WOV.emit("wallet"); WOV.haptic("success"); if (A) A.sfx("reward"); toast("Подарунок: " + msg); renderShop();
+  };
+  top.appendChild(gift);
+  const d = dailyDeal();
+  if (d) {
+    const name = d.type === "vehicle" ? d.v.name : "Камуфляж «" + d.c.name + "»";
+    const deal = el("button", "promo deal", '<span class="tag">−30%</span><small>Пропозиція дня</small>' + (d.type === "vehicle" ? "<canvas></canvas>" : '<div class="swatch" style="height:30px"></div>') + "<b>" + name + '</b><span class="price"><s>' + d.full + "</s>" + ICONS.crystal + fmt(d.price) + "</span>");
+    if (d.type === "vehicle") WOV.preview(deal.querySelector("canvas"), d.v, { fill: 0.9, angle: -0.4, tAngle: -0.1 });
+    else deal.querySelector(".swatch").style.background = swatchBg(d.c);
+    deal.onclick = () => {
+      if (!WOV.spend("crystals", d.price)) return noMoney("crystals");
+      if (d.type === "vehicle") { p.owned.push(d.v.id); toast(d.v.name + " у твоєму ангарі!"); }
+      else { p.camos.push(d.c.id); toast("Камуфляж «" + d.c.name + "» твій"); }
+      WOV.save(); WOV.haptic("success"); if (A) A.sfx("coin"); renderShop();
+    };
+    top.appendChild(deal);
+  }
+}
 function renderShop() {
   const p = WOV.profile;
-  const bx = $("#boxes"); bx.innerHTML = "";
-  for (const b of WOV.BOXES) {
-    const c = el("button", "box", boxArt(b) + "<b>" + b.name + "</b><small>" + b.desc + "</small>" + priceHtml("coins", b.price));
-    c.style.setProperty("--glow", b.color);
-    c.onclick = () => buyBox(b); bx.appendChild(c);
+  renderShopTop();
+  const tabs = $("#shopTabs"); tabs.innerHTML = "";
+  for (const [id, label] of SHOP_TABS) { const b = el("button", id === shopTab ? "active" : "", label); b.onclick = () => { shopTab = id; renderShop(); WOV.haptic("select"); }; tabs.appendChild(b); }
+  const body = $("#shopBody"); body.innerHTML = "";
+  if (shopTab === "boxes") {
+    const bx = el("div", "boxes"); body.appendChild(bx);
+    for (const b of WOV.BOXES) {
+      const c = el("button", "box", boxArt(b) + "<b>" + b.name + "</b><small>" + b.desc + "</small>" + priceHtml("coins", b.price));
+      c.style.setProperty("--glow", b.color);
+      c.onclick = () => buyBox(b); bx.appendChild(c);
+    }
+    body.appendChild(el("p", "note", "Монети заробляються в боях: за знищену техніку, шкоду і перемогу. Кристали випадають з боксів."));
+  } else if (shopTab === "ammo") {
+    body.appendChild(el("p", "note", "Звичайні снаряди безлімітні. Спецснаряди витрачаються в бою, перемикай їх кнопками біля «ВОГОНЬ» (на ПК клавіші 1, 2, 3). Ремкомплект (зелений хрестик або R) раз за бій лагодить модулі, гасить пожежу і додає 20% міцності."));
+    for (const k of Object.keys(WOV.STOCK)) {
+      const st = WOV.STOCK[k], ico = STOCK_ICO[k], ammo = st.kind ? WOV.AMMO[st.kind].find(a => a.stock === k) : null;
+      const card = el("div", "stock", shellIco(ico) + "<div><b>" + st.name + "</b>" + (st.kind ? ' <small style="color:var(--muted)">· ' + WOV.KIND_NAME[st.kind].toLowerCase() + "</small>" : "") +
+        '<div class="have">У запасі: ' + fmt(p.ammo[k] || 0) + "</div><p>" + (ammo ? ammo.desc : "Раз за бій лагодить модулі, гасить пожежу і повертає 20% міцності.") + '</p></div><div class="packs"></div>');
+      st.packs.forEach(pk => {
+        const b = el("button", "", "<span>×" + fmt(pk.n) + "</span>" + priceHtml("coins", pk.coins));
+        b.onclick = () => { if (!WOV.spend("coins", pk.coins)) return noMoney("coins"); p.ammo[k] = (p.ammo[k] || 0) + pk.n; WOV.save(); WOV.haptic("success"); if (A) A.sfx("coin"); toast("+" + fmt(pk.n) + " · " + st.name); renderShop(); };
+        card.querySelector(".packs").appendChild(b);
+      });
+      body.appendChild(card);
+    }
+  } else if (shopTab === "vehicles") {
+    const pl = el("div", "prem"); body.appendChild(pl);
+    for (const v of WOV.VEHICLES.filter(v => v.prem)) {
+      const owned = WOV.owns(v.id);
+      const c = el("button", "shopitem" + (owned ? " owned" : ""), "<canvas></canvas><b>" + v.name + " · " + WOV.ROMAN[v.tier] + "</b>" + (owned ? '<span class="price">Отримано ✓</span>' : priceHtml("crystals", v.prem)));
+      c.onclick = () => vehicleSheet(v); pl.appendChild(c);
+      WOV.preview(c.querySelector("canvas"), v, { fill: 0.9, angle: -0.5, tAngle: -0.2 });
+    }
+    const go = el("button", "btn-sec", "Звичайна техніка в дереві досліджень →"); go.style.cssText = "width:100%;margin-top:12px"; go.onclick = () => setTab("tree"); body.appendChild(go);
+  } else if (shopTab === "camo") {
+    const cs = el("div", "camo-shop"); body.appendChild(cs);
+    for (const cm of WOV.CAMOS.filter(c => c.price > 0)) {
+      const owned = p.camos.includes(cm.id);
+      const c = el("button", "shopitem" + (owned ? " owned" : ""), '<div class="swatch"></div><b>' + cm.name + "</b>" + (owned ? '<span class="price">✓</span>' : priceHtml("crystals", cm.price)));
+      c.style.padding = "6px"; c.querySelector(".swatch").style.background = swatchBg(cm);
+      c.onclick = () => {
+        if (owned) { toast("Обери камуфляж в ангарі"); return; }
+        if (!WOV.spend("crystals", cm.price)) return noMoney("crystals");
+        p.camos.push(cm.id); p.camoSel[WOV.currentVehicle().id] = cm.id; WOV.save(); WOV.haptic("success"); toast("Камуфляж «" + cm.name + "» наведено на " + WOV.currentVehicle().name); renderShop();
+      };
+      cs.appendChild(c);
+    }
+    body.appendChild(el("p", "note", "Куплений камуфляж можна наводити на будь-яку свою техніку в ангарі."));
+  } else {
+    const misc = el("div", "misc"); body.appendChild(misc);
+    for (const bo of WOV.BOOSTS) {
+      const b = el("button", "shopitem", '<div style="height:46px;display:grid;place-items:center">' + ICONS.boost.replace("<svg", '<svg width="40" height="40"') + "</div><b>×2 монет на " + bo.battles + " боїв</b>" + priceHtml("crystals", bo.price));
+      b.onclick = () => { if (!WOV.spend("crystals", bo.price)) return noMoney("crystals"); p.boost += bo.battles; WOV.save(); WOV.haptic("success"); toast("Бустер: ×2 монет ще на " + p.boost + " боїв"); renderShop(); };
+      misc.appendChild(b);
+    }
+    for (const ex of WOV.EXCHANGES) {
+      const b = el("button", "shopitem", '<div style="height:46px;display:flex;align-items:center;justify-content:center;gap:6px">' + ICONS.crystal.replace("<svg", '<svg width="30" height="30"') + "<b style='margin:0'>→</b>" + ICONS.coin.replace("<svg", '<svg width="30" height="30"') + "</div><b>" + ex.crystals + " → " + fmt(ex.coins) + " монет</b>" + priceHtml("crystals", ex.crystals));
+      b.onclick = () => { if (!WOV.spend("crystals", ex.crystals)) return noMoney("crystals"); WOV.give("coins", ex.coins); WOV.haptic("success"); if (A) A.sfx("coin"); toast("+" + fmt(ex.coins) + " монет"); };
+      misc.appendChild(b);
+    }
+    if (p.boost > 0) body.appendChild(el("p", "note", "Активний бустер: ×2 монет ще на " + p.boost + " боїв."));
   }
-  const pl = $("#premList"); pl.innerHTML = "";
-  for (const v of WOV.VEHICLES.filter(v => v.prem)) {
-    const owned = WOV.owns(v.id);
-    const c = el("button", "shopitem" + (owned ? " owned" : ""), "<canvas></canvas><b>" + v.name + " · " + WOV.ROMAN[v.tier] + "</b>" + (owned ? '<span class="price">Отримано ✓</span>' : priceHtml("crystals", v.prem)));
-    c.onclick = () => vehicleSheet(v); pl.appendChild(c);
-    WOV.preview(c.querySelector("canvas"), v, { fill: 0.9, angle: -0.5, tAngle: -0.2 });
-  }
-  const cs = $("#camoShop"); cs.innerHTML = "";
-  for (const cm of WOV.CAMOS.filter(c => c.price > 0)) {
-    const owned = p.camos.includes(cm.id);
-    const c = el("button", "shopitem" + (owned ? " owned" : ""), '<div class="swatch"></div><b>' + cm.name + "</b>" + (owned ? '<span class="price">✓</span>' : priceHtml("crystals", cm.price)));
-    c.style.padding = "6px"; c.querySelector(".swatch").style.background = swatchBg(cm);
-    c.onclick = () => {
-      if (owned) { toast("Обери камуфляж в ангарі"); return; }
-      if (!WOV.spend("crystals", cm.price)) { WOV.haptic("error"); toast("Не вистачає кристалів"); return; }
-      p.camos.push(cm.id); p.camoSel[WOV.currentVehicle().id] = cm.id; WOV.save(); WOV.haptic("success"); toast("Камуфляж «" + cm.name + "» наведено на " + WOV.currentVehicle().name); renderShop();
-    };
-    cs.appendChild(c);
-  }
-  const misc = $("#misc"); misc.innerHTML = "";
-  const boost = el("button", "shopitem", '<div style="height:46px;display:grid;place-items:center">' + ICONS.boost.replace("<svg", '<svg width="40" height="40"') + "</div><b>×2 монет на " + WOV.BOOST.battles + " боїв</b>" + priceHtml("crystals", WOV.BOOST.price));
-  boost.onclick = () => { if (!WOV.spend("crystals", WOV.BOOST.price)) { WOV.haptic("error"); toast("Не вистачає кристалів"); return; } p.boost += WOV.BOOST.battles; WOV.save(); WOV.haptic("success"); toast("Бустер активовано: ×2 монет на " + p.boost + " боїв"); };
-  const ex = el("button", "shopitem", '<div style="height:46px;display:flex;align-items:center;justify-content:center;gap:6px">' + ICONS.crystal.replace("<svg", '<svg width="30" height="30"') + "<b style='margin:0'>→</b>" + ICONS.coin.replace("<svg", '<svg width="30" height="30"') + "</div><b>" + WOV.EXCHANGE.crystals + " кристалів → " + fmt(WOV.EXCHANGE.coins) + " монет</b>" + priceHtml("crystals", WOV.EXCHANGE.crystals));
-  ex.onclick = () => { if (!WOV.spend("crystals", WOV.EXCHANGE.crystals)) { WOV.haptic("error"); toast("Не вистачає кристалів"); return; } WOV.give("coins", WOV.EXCHANGE.coins); WOV.haptic("success"); toast("+" + fmt(WOV.EXCHANGE.coins) + " монет"); };
-  misc.appendChild(boost); misc.appendChild(ex);
 }
 
 function buyBox(b) {
@@ -253,6 +342,7 @@ function buyBox(b) {
       else if (r.type === "coins") { ico = ICONS.coin; val = "+" + fmt(r.amount); label = "монет"; }
       else if (r.type === "camo") { ico = ICONS.camo; val = r.label; label = "камуфляж"; epic = true; }
       else if (r.type === "boost") { ico = ICONS.boost; val = "×2"; label = "монет на " + r.amount + " бої"; epic = true; }
+      else if (r.type === "ammo") { ico = shellIco(STOCK_ICO[r.id]); val = "+" + fmt(r.amount); label = r.label.toLowerCase(); }
       else { ico = ICONS.vehicle; val = r.label; label = "преміум-техніка!"; epic = true; }
       const e = el("div", "reward" + (epic ? " epic" : ""), ico + "<b>" + val + "</b><small>" + label + "</small>");
       e.style.animationDelay = (i * 0.18) + "s"; box.appendChild(e);

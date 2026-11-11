@@ -25,18 +25,28 @@ if (WOV.tg) WOV.tg.onEvent("viewportChanged", resize);
 
 // ---------- input ----------
 const keys = {};
-window.addEventListener("keydown", e => { keys[e.code] = true; if (e.code === "Space" && B) e.preventDefault(); });
+window.addEventListener("keydown", e => {
+  keys[e.code] = true; if (e.code === "Space" && B) e.preventDefault();
+  if (!B || B.over || B.player.dead || e.repeat) return;
+  const n = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];
+  if (n !== undefined && AMMO[B.player.kind][n]) setAmmo(B.player, AMMO[B.player.kind][n].id);
+  if (e.code === "KeyR") useRepair(B.player);
+});
 window.addEventListener("keyup", e => { keys[e.code] = false; });
 const mouse = { x: 0, y: 0, down: false, active: false };
 cv.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; });
-cv.addEventListener("mousedown", () => { mouse.down = true; mouse.active = true; });
+cv.addEventListener("mousedown", e => { mouse.active = true; if (B && pressButton(e.clientX, e.clientY, null)) return; mouse.down = true; });
 window.addEventListener("mouseup", () => { mouse.down = false; });
 const sticks = { L: { id: null, ox: 0, oy: 0, dx: 0, dy: 0 }, R: { id: null, ox: 0, oy: 0, dx: 0, dy: 0 } };
-const STICK_R = 54;
-let usingTouch = false;
+const STICK_R = 60;
+const fireBtn = { id: null };
+let usingTouch = !!((window.matchMedia && matchMedia("(pointer: coarse)").matches) || ("ontouchstart" in window && navigator.maxTouchPoints > 0));
 cv.addEventListener("touchstart", e => {
   e.preventDefault(); usingTouch = true; mouse.active = false;
-  for (const t of e.changedTouches) { const s = t.clientX < W / 2 ? sticks.L : sticks.R; if (s.id !== null) continue; s.id = t.identifier; s.ox = t.clientX; s.oy = t.clientY; s.dx = s.dy = 0; }
+  for (const t of e.changedTouches) {
+    if (B && pressButton(t.clientX, t.clientY, t.identifier)) continue;
+    const s = t.clientX < W / 2 ? sticks.L : sticks.R; if (s.id !== null) continue; s.id = t.identifier; s.ox = t.clientX; s.oy = t.clientY; s.dx = s.dy = 0;
+  }
 }, { passive: false });
 cv.addEventListener("touchmove", e => {
   e.preventDefault();
@@ -46,7 +56,28 @@ cv.addEventListener("touchmove", e => {
     s.dx = dx / STICK_R; s.dy = dy / STICK_R;
   }
 }, { passive: false });
-const endTouch = e => { e.preventDefault(); for (const t of e.changedTouches) for (const s of [sticks.L, sticks.R]) if (s.id === t.identifier) { s.id = null; s.dx = s.dy = 0; } };
+const endTouch = e => { e.preventDefault(); for (const t of e.changedTouches) { if (fireBtn.id === t.identifier) fireBtn.id = null; for (const s of [sticks.L, sticks.R]) if (s.id === t.identifier) { s.id = null; s.dx = s.dy = 0; } } };
+
+// on-screen buttons: fire (touch), ammo types and repair kit, arranged around the bottom-right corner
+function safeBottom() { const tg = WOV.tg; return (tg && tg.safeAreaInset && tg.safeAreaInset.bottom) || 0; }
+function controls() {
+  const p = B.player, fx = W - (usingTouch ? 76 : 56), fy = H - (usingTouch ? 96 : 56) - safeBottom(), R = usingTouch ? 90 : 78, list = [];
+  if (usingTouch) list.push({ k: "fire", x: fx, y: fy, r: 44 });
+  AMMO[p.kind].forEach((a, i) => { const ang = Math.PI + i * 0.55; list.push({ k: "ammo", a, i, x: fx + Math.cos(ang) * R, y: fy + Math.sin(ang) * R, r: 23 }); });
+  const ang = Math.PI + 3 * 0.55; list.push({ k: "repair", x: fx + Math.cos(ang) * R, y: fy + Math.sin(ang) * R, r: 21 });
+  return list;
+}
+function pressButton(x, y, touchId) {
+  const p = B.player; if (p.dead || B.over) return false;
+  for (const b of controls()) {
+    if ((x - b.x) ** 2 + (y - b.y) ** 2 > (b.r + 8) ** 2) continue;
+    if (b.k === "fire") { if (touchId !== null) fireBtn.id = touchId; }
+    else if (b.k === "ammo") setAmmo(p, b.a.id);
+    else useRepair(p);
+    return true;
+  }
+  return false;
+}
 cv.addEventListener("touchend", endTouch, { passive: false });
 cv.addEventListener("touchcancel", endTouch, { passive: false });
 
@@ -60,7 +91,7 @@ function makeUnit(v, team, pos, name, isPlayer, camo) {
   const a = team === 0 ? 0 : Math.PI;
   return { v, kind: v.kind, team, x: pos.x, y: pos.y, r: v.r, angle: a, tAngle: a, vel: v.kind === "plane" ? v.speed * 0.8 : 0,
     hp: v.hp, maxHp: v.hp, cd: rnd(0.5, 1.5), aaCd: 0, flash: 0, track: 0, bank: 0, name, isPlayer, camo,
-    kills: 0, dmgDone: 0, mods: {}, fire: 0, stall: 0, wet: false, trackAcc: 0, S: null, ai: { wx: pos.x, wy: pos.y, retarget: 0, stuck: 0, pass: 0, target: null, think: 0 } };
+    kills: 0, dmgDone: 0, mods: {}, fire: 0, ammo: AMMO[v.kind][0].id, limited: {}, repairUsed: false, stall: 0, wet: false, trackAcc: 0, S: null, ai: { wx: pos.x, wy: pos.y, retarget: 0, stuck: 0, pass: 0, target: null, think: 0 } };
 }
 
 function pickBotVehicle(kind, tier) {
@@ -93,6 +124,9 @@ function start(modeId, onEnd) {
   B = { mode, modeId, map, units, shells: [], parts: [], texts: [], wrecks: [], feed: [], time: mode.time, over: false,
     player: units[0], cam: { x: 0, y: 0, shake: 0 }, spectate: null, onEnd, startedAt: performance.now(), banner: { text: mode.name.toUpperCase(), sub: "Знищ усіх ворогів", t: 2.5 } };
   B.cam.x = B.player.x - W / 2; B.cam.y = B.player.y - H / 2;
+  setAmmo(B.player, prof.ammoSel[pv.kind] || "", true);
+  for (const u of units) if (!u.isPlayer && u.kind !== "plane" && Math.random() < (u.kind === "ship" ? 0.35 : 0.25)) u.ammo = "he";
+  fireBtn.id = null; sticks.L.id = sticks.R.id = null; sticks.L.dx = sticks.L.dy = sticks.R.dx = sticks.R.dy = 0;
   map.warmup(B.player.x, B.player.y, W, H);
   if (WOV.Audio) WOV.Audio.music("battle");
   perf.n = 0; perf.acc = 0;
@@ -105,14 +139,69 @@ function start(modeId, onEnd) {
 
 function stop() { if (WOV.Audio) { WOV.Audio.engine(null); WOV.Audio.music("menu"); } B = null; cancelAnimationFrame(raf); cv.style.display = "none"; document.getElementById("battleUi").classList.add("hidden"); }
 
+// ---------- ammunition ----------
+const AMMO = WOV.AMMO;
+const ammoDef = u => AMMO[u.kind].find(a => a.id === u.ammo) || AMMO[u.kind][0];
+function ammoLeft(u, a) { // shots left for this ammo type (Infinity = unlimited)
+  if (a.limit) return u.limited[a.id] !== undefined ? u.limited[a.id] : a.limit;
+  if (a.stock && u.isPlayer) return WOV.profile.ammo[a.stock] || 0;
+  return Infinity;
+}
+function setAmmo(u, id, quiet) {
+  const a = AMMO[u.kind].find(x => x.id === id); if (!a || u.ammo === id) return;
+  if (ammoLeft(u, a) <= 0) { if (u.isPlayer && !quiet) { B.ammoNote = { text: a.name + ": немає в запасі", t: 1.6, col: "#e0604a" }; WOV.haptic("error"); } return; }
+  u.ammo = id;
+  if (u.kind !== "plane") u.cd = Math.max(u.cd, u.S ? u.S.reload * 0.7 : 1);
+  if (u.isPlayer && !quiet) { B.ammoNote = { text: "Заряджено: " + a.name, t: 1.4, col: a.col }; WOV.haptic("select"); SFX("click"); }
+}
+function consume(u, a) {
+  if (a.limit) u.limited[a.id] = ammoLeft(u, a) - 1;
+  else if (a.stock && u.isPlayer) WOV.profile.ammo[a.stock] = Math.max(0, (WOV.profile.ammo[a.stock] || 0) - 1);
+  else return;
+  if (ammoLeft(u, a) <= 0) { u.ammo = AMMO[u.kind][0].id; if (u.isPlayer) B.ammoNote = { text: a.name + " закінчились", t: 2, col: "#e0604a" }; }
+}
+function useRepair(p) {
+  if (p.dead || B.over) return;
+  const prof = WOV.profile;
+  if (p.repairUsed) { B.ammoNote = { text: "Ремкомплект уже використано в цьому бою", t: 1.8, col: "#e0604a" }; return; }
+  if (!(prof.ammo.repair > 0)) { B.ammoNote = { text: "Немає ремкомплектів, купи в магазині", t: 1.8, col: "#e0604a" }; WOV.haptic("error"); return; }
+  prof.ammo.repair--; p.repairUsed = true;
+  p.mods = {}; p.fire = 0; p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.2); p.S = effective(p);
+  alert("Ремонт виконано", "good"); WOV.haptic("success");
+}
+// HE shells and rockets: blast damages everyone nearby on the ground or water
+function blast(s, except) {
+  const R = s.splash; spark(s.x, s.y, "#ffb060", 14, 200); spark(s.x, s.y, "#ffe0a0", 6, 90);
+  for (const t of B.units) {
+    if (t.dead || t === except || t.team === s.team || t.kind === "plane") continue;
+    const d = Math.max(0, Math.hypot(t.x - s.x, t.y - s.y) - t.r); if (d > R) continue;
+    const dmg = Math.min(t.hp, s.dmg * 0.4 * (1 - d / R)); if (dmg < 1) continue;
+    t.hp -= dmg; s.owner.dmgDone += dmg; B.lastDmg = B.time; s.hitT = t;
+    if (s.owner.isPlayer || t.isPlayer) floatText(t.x, t.y - t.r - 10, "-" + Math.round(dmg), t.isPlayer ? "#ff8a70" : "#ffc07a");
+    if (t.hp <= 0.5) destroy(t, s.owner);
+  }
+}
+
 // ---------- weapons ----------
+function fireRocket(u, A) {
+  const left = ammoLeft(u, A), side = left % 2 ? 1 : -1, a = u.angle + rnd(-0.02, 0.02), sp = 470 + u.vel;
+  const ox = Math.cos(a + Math.PI / 2) * u.r * 0.6 * side, oy = Math.sin(a + Math.PI / 2) * u.r * 0.6 * side;
+  B.shells.push({ x: u.x + ox, y: u.y + oy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, team: u.team, dmg: 45 + u.v.tier * 22, life: 1.3, owner: u, air: true, ground: true, rocket: true,
+    splash: 55, mod: 2, fireK: 2, noRico: true, pen: 0.3, col: A.col });
+  consume(u, A); u.cd = 0.7;
+  SFX("cannon", { x: u.x, y: u.y, k: 0.15, vol: u.isPlayer ? 0.8 : 0.5 });
+  if (u.isPlayer) WOV.haptic("medium");
+}
 function fire(u, angOverride) {
-  const v = u.v, m = WOV.muzzle(u), air = u.kind === "plane";
+  const v = u.v, m = WOV.muzzle(u), air = u.kind === "plane", A = ammoDef(u);
+  if (A.rocket) return fireRocket(u, A);
   if (!air && B.map.pointInWalls(m.x, m.y)) { u.cd = v.reload * 0.4; return; }
   const spread = air ? rnd(-0.035, 0.035) : u.isPlayer ? rnd(-0.015, 0.015) : rnd(-0.045, 0.045);
   const a = (angOverride !== undefined ? angOverride : m.a) + spread;
-  const sp = v.shell + (air ? u.vel : 0);
-  B.shells.push({ x: m.x, y: m.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, team: u.team, dmg: v.dmg, life: v.range, owner: u, air, small: air });
+  const sp = v.shell * (A.speed || 1) + (air ? u.vel : 0);
+  B.shells.push({ x: m.x, y: m.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, team: u.team, dmg: v.dmg * (A.dmg || 1), life: v.range / (A.speed || 1), owner: u, air, small: air,
+    pen: A.pen || 0, splash: A.splash || 0, mod: A.mod || 1, fireK: A.fire || 1, noRico: !!A.noRico, rico: A.rico !== undefined ? A.rico : 1, col: A.col });
+  consume(u, A);
   u.cd = u.S.reload * (u.isPlayer ? 1 : air ? 1.5 : 1.35); u.flash = air ? 0.04 : 0.09;
   if (!air) SFX("cannon", { x: m.x, y: m.y, k: clamp((v.dmg - 30) / 300, 0, 1), vol: u.isPlayer ? 1 : 0.8 });
   else SFX("mg", { x: m.x, y: m.y, vol: u.isPlayer ? 0.7 : 0.5 });
@@ -156,7 +245,7 @@ function pickModule(t, impact) {
   return ar < Math.PI / 4 ? "battery" : ar > 3 * Math.PI / 4 ? (Math.random() < 0.6 ? "rudder" : "engine") : pick(["engine", "aa", "battery"]);
 }
 function damageModule(t, s, impact) {
-  const chance = s.small ? (t.kind === "plane" ? 0.05 : 0.02) : 0.42;
+  const chance = (s.small ? (t.kind === "plane" ? 0.05 : 0.02) : 0.42) * (s.mod || 1);
   if (Math.random() < chance) {
     const m = pickModule(t, impact);
     const fresh = !t.mods[m];
@@ -166,7 +255,7 @@ function damageModule(t, s, impact) {
       else if (s.owner.isPlayer) floatText(t.x, t.y + t.r + 18, MODS[t.kind][m] + "!", "#ffcf6a");
     }
   }
-  const fireChance = s.small ? 0.008 : (t.kind === "tank" && Math.abs(angNorm(impact - t.angle)) > 2.35 ? 0.25 : 0.07);
+  const fireChance = (s.small ? 0.008 : (t.kind === "tank" && Math.abs(angNorm(impact - t.angle)) > 2.35 ? 0.25 : 0.07)) * (s.fireK || 1);
   if (!t.fire && Math.random() < fireChance) {
     t.fire = 6; t.fireBy = s.owner;
     if (t.isPlayer) { alert("Пожежа! Техніка горить", "fire"); WOV.haptic("error"); }
@@ -215,13 +304,15 @@ function hit(s, t) {
   const impact = Math.atan2(s.y - t.y, s.x - t.x);
   let mult = 1, zone = 1;
   if (t.kind !== "plane") {
-    if (s.owner.kind === "plane") mult = 0.75; // strafing from above
+    if (s.owner.kind === "plane") mult = s.rocket ? 1 : 0.75; // strafing from above
     else {
       const rel = Math.abs(angNorm(impact - t.angle));
       zone = rel < Math.PI / 4 ? 0 : rel > 3 * Math.PI / 4 ? 2 : 1;
       mult = t.v.armor[zone];
+      if (s.pen > 0 && mult < 1) mult += (1 - mult) * s.pen;
+      else if (s.pen < 0) mult *= 1 + s.pen * (mult < 1 ? 1.4 : 0.4);
       const inc = Math.abs(angNorm(Math.atan2(-s.vy, -s.vx) - impact));
-      if (inc > 1.15 && Math.random() < 0.7) {
+      if (!s.noRico && inc > 1.15 && Math.random() < 0.7 * (s.rico !== undefined ? s.rico : 1)) {
         floatText(t.x, t.y - t.r - 10, "РИКОШЕТ", "#cfcab8"); SFX("ricochet", { x: t.x, y: t.y });
         const nx = Math.cos(impact), ny = Math.sin(impact), dot = s.vx * nx + s.vy * ny;
         s.vx = (s.vx - 2 * dot * nx) * 0.6; s.vy = (s.vy - 2 * dot * ny) * 0.6; s.team = -1; s.life = 0.25;
@@ -297,6 +388,18 @@ function fly(u, dt, dir, mag) {
   u.x = clamp(u.x + Math.cos(u.angle) * u.vel * dt, -40, S + 40); u.y = clamp(u.y + Math.sin(u.angle) * u.vel * dt, -40, S + 40);
 }
 const canGunHit = (shooter, target) => !(shooter.kind === "tank" && target.kind === "plane");
+// nearest enemy the gun can reach (with lead), as an angle; null if nobody is in range
+function autoTarget(p) {
+  let best = null, bd = p.v.shell * p.v.range * 0.95;
+  for (const e of B.units) {
+    if (e.dead || e.team === p.team || !canGunHit(p, e)) continue;
+    const d = Math.hypot(e.x - p.x, e.y - p.y);
+    if (d < bd && B.map.lineOfSight(p.x, p.y, e.x, e.y)) { bd = d; best = e; }
+  }
+  if (!best) return null;
+  const tt = bd / (p.v.shell * (ammoDef(p).speed || 1));
+  return Math.atan2(best.y + Math.sin(best.angle) * best.vel * tt - p.y, best.x + Math.cos(best.angle) * best.vel * tt - p.x);
+}
 function aimAssist(p, aim, cone) {
   let bt = null, bd = cone;
   for (const e of B.units) {
@@ -306,7 +409,7 @@ function aimAssist(p, aim, cone) {
     if (off < bd && (p.kind === "plane" || B.map.lineOfSight(p.x, p.y, e.x, e.y))) { bd = off; bt = e; }
   }
   if (!bt) return aim;
-  const tt = Math.hypot(bt.x - p.x, bt.y - p.y) / p.v.shell;
+  const tt = Math.hypot(bt.x - p.x, bt.y - p.y) / (p.v.shell * (ammoDef(p).speed || 1));
   return Math.atan2(bt.y + Math.sin(bt.angle) * bt.vel * tt - p.y, bt.x + Math.cos(bt.angle) * bt.vel * tt - p.x);
 }
 
@@ -322,7 +425,7 @@ function updatePlayer(dt) {
     else if (anyKey) { dir = p.angle + rot * 1.2; mag = fwd > 0 ? 1 : fwd < 0 ? 0 : 0.45; }
     else if (!usingTouch && mouse.active) { const dx = mouse.x + cam.x - p.x, dy = mouse.y + cam.y - p.y; dir = Math.atan2(dy, dx); mag = clamp(Math.hypot(dx, dy) / 300, 0.2, 1); }
     fly(p, dt, dir, mag);
-    if ((R.id !== null || mouse.down || keys.Space) && p.cd <= 0) fire(p, aimAssist(p, p.angle, 0.1));
+    if ((fireBtn.id !== null || R.id !== null || mouse.down || keys.Space) && p.cd <= 0) fire(p, ammoDef(p).rocket ? undefined : aimAssist(p, p.angle, 0.1));
     return;
   }
   if (anyKey) {
@@ -335,13 +438,15 @@ function updatePlayer(dt) {
     const reverse = lmag > 0.05 && Math.abs(angNorm(ldir - p.angle)) > 2.4;
     drive(p, dt, ldir, L.id !== null ? lmag : 0, reverse);
   }
-  let aim = null, want = false;
-  if (R.id !== null && Math.hypot(R.dx, R.dy) > 0.25) { aim = Math.atan2(R.dy, R.dx); want = Math.hypot(R.dx, R.dy) > 0.6; }
-  else if (!usingTouch && mouse.active) { aim = Math.atan2(mouse.y + cam.y - p.y, mouse.x + cam.x - p.x); want = mouse.down; }
-  if (keys.Space) want = true;
+  let aim = null, manual = false;
+  const want = fireBtn.id !== null || mouse.down || keys.Space;
+  if (R.id !== null && Math.hypot(R.dx, R.dy) > 0.25) { aim = Math.atan2(R.dy, R.dx); manual = true; }
+  else if (!usingTouch && mouse.active) aim = Math.atan2(mouse.y + cam.y - p.y, mouse.x + cam.x - p.x);
+  else if (usingTouch) { const t = autoTarget(p); if (t) aim = t; } // touch: the turret follows the nearest enemy by itself
+  p.autoAim = usingTouch && !manual && aim !== null;
   if (aim !== null) { aim = aimAssist(p, aim, 0.22); p.tAngle = approachAng(p.tAngle, aim, v.tturn * dt); }
   else p.tAngle = approachAng(p.tAngle, p.angle, v.tturn * dt * 0.3);
-  if (want && p.cd <= 0 && (aim === null || Math.abs(angNorm(aim - p.tAngle)) < 0.25)) fire(p);
+  if (want && p.cd <= 0 && (fireBtn.id !== null || aim === null || Math.abs(angNorm(aim - p.tAngle)) < 0.25)) fire(p);
 }
 
 // ---------- bots ----------
@@ -483,12 +588,15 @@ function update(dt) {
       for (const t of b.units) {
         if (t.dead || t.team === s.team || t === s.owner) continue;
         if (s.aa && t.kind !== "plane") continue;
+        if (s.ground && t.kind === "plane") continue;
         if (t.kind === "plane" && !s.air && s.owner.kind === "tank") continue;
         const hr = t.kind === "ship" ? t.r * 1.1 : t.r + (s.small ? 3 : 2);
         if ((t.x - s.x) ** 2 + (t.y - s.y) ** 2 < hr * hr) { if (s.team !== -1) hit(s, t); else s.life = 0; break; }
       }
     }
     s.life -= dt;
+    if (s.rocket && Math.random() < 0.8) b.parts.push({ x: s.x, y: s.y, vx: rnd(-8, 8), vy: rnd(-8, 8), life: 0.5, max: 0.5, c: "rgba(210,205,195,.5)", s: rnd(2, 4), smoke: true });
+    if (s.life <= 0 && s.splash && !s.blasted && s.team !== -1) { s.blasted = true; blast(s, s.hitT); SFX("boom", { x: s.x, y: s.y, vol: 0.45 }); }
     if (s.life <= 0 && !s.small) { if (b.map.isWater(s.x, s.y)) { spark(s.x, s.y, "#dfeef2", 7, 90); SFX("splash", { x: s.x, y: s.y, vol: 0.5 }); } else if (s.dmg > 20) b.map.stamp({ t: "crater", x: s.x, y: s.y, a: 0, r: 5 + Math.min(10, s.dmg / 15) }); }
   }
   b.shells = b.shells.filter(s => s.life > 0);
@@ -501,6 +609,7 @@ function update(dt) {
   for (const f of b.feed) f.t -= dt;
   b.feed = b.feed.filter(f => f.t > 0);
   if (b.banner) { b.banner.t -= dt; if (b.banner.t <= 0) b.banner = null; }
+  if (b.ammoNote) { b.ammoNote.t -= dt; if (b.ammoNote.t <= 0) b.ammoNote = null; }
   // camera
   let focus = p;
   if (p.dead) { if (!b.spectate || b.spectate.dead) b.spectate = b.units.find(u => !u.dead && u.team === 0) || b.units.find(u => !u.dead); focus = b.spectate || p; }
@@ -581,8 +690,8 @@ function render() {
   map.drawTrees(ctx, sx, sy, W, H);
   for (const s of b.shells) {
     if (!vis(s.x, s.y, 30)) continue;
-    ctx.strokeStyle = s.team === 0 ? "#ffe29a" : s.team === 1 ? "#ff9a7a" : "#ddd";
-    ctx.lineWidth = s.small ? 1.6 : 3.2; const k = s.small ? 0.012 : 0.024;
+    ctx.strokeStyle = s.owner.isPlayer && s.col ? s.col : s.team === 0 ? "#ffe29a" : s.team === 1 ? "#ff9a7a" : "#ddd";
+    ctx.lineWidth = s.rocket ? 4 : s.small ? 1.6 : 3.2; const k = s.rocket ? 0.03 : s.small ? 0.012 : 0.024;
     ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - s.vx * k, s.y - s.vy * k); ctx.stroke();
   }
   for (const q of b.parts) if (!q.wake && vis(q.x, q.y, 30)) {
@@ -692,14 +801,57 @@ function drawHUD() {
     ctx.textAlign = "center"; ctx.font = "800 16px system-ui, sans-serif"; ctx.fillStyle = "#e0604a"; ctx.fillText("ТЕБЕ ЗНИЩЕНО", W / 2, H - 120);
     ctx.font = "600 12px system-ui, sans-serif"; ctx.fillStyle = "#cfcab8"; ctx.fillText("Спостереження за союзниками. Бій триває.", W / 2, H - 100);
   }
-  // sticks
-  if (usingTouch && !p.dead) for (const s of [sticks.L, sticks.R]) {
-    const isL = s === sticks.L, ox = s.id !== null ? s.ox : isL ? 90 : W - 90, oy = s.id !== null ? s.oy : H - 110;
-    ctx.globalAlpha = s.id !== null ? 0.5 : 0.22;
+  if (!p.dead && !b.over) drawControls(p);
+}
+
+function drawControls(p) {
+  // sticks: left = movement (always shown on touch), right = manual aim (only while held)
+  if (usingTouch) for (const s of [sticks.L, sticks.R]) {
+    const isL = s === sticks.L; if (!isL && s.id === null) continue;
+    const ox = s.id !== null ? s.ox : 100, oy = s.id !== null ? s.oy : H - 120 - safeBottom();
+    ctx.globalAlpha = s.id !== null ? 0.55 : 0.28;
+    ctx.fillStyle = "rgba(10,14,13,.35)"; ctx.beginPath(); ctx.arc(ox, oy, STICK_R, 0, TAU); ctx.fill();
     ctx.strokeStyle = "#e8e4d8"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ox, oy, STICK_R, 0, TAU); ctx.stroke();
-    ctx.fillStyle = isL ? "#e8e4d8" : "#d9a441"; ctx.beginPath(); ctx.arc(ox + s.dx * STICK_R, oy + s.dy * STICK_R, 22, 0, TAU); ctx.fill();
-    if (!isL && p.kind === "plane" && s.id === null) { ctx.globalAlpha = 0.6; ctx.fillStyle = "#1d2120"; ctx.font = "bold 10px system-ui"; ctx.textAlign = "center"; ctx.fillText("ВОГОНЬ", ox, oy + 4); }
+    ctx.fillStyle = isL ? "#e8e4d8" : "#d9a441"; ctx.beginPath(); ctx.arc(ox + s.dx * STICK_R, oy + s.dy * STICK_R, 24, 0, TAU); ctx.fill();
+    if (isL && s.id === null) { ctx.globalAlpha = 0.5; ctx.fillStyle = "#e8e4d8"; ctx.font = "700 10px system-ui"; ctx.textAlign = "center"; ctx.fillText("РУХ", ox, oy - STICK_R - 8); }
     ctx.globalAlpha = 1;
+  }
+  const A = ammoDef(p), reload = p.kind === "plane" && !A.rocket ? 0 : clamp(p.cd / (A.rocket ? 0.7 : p.S.reload), 0, 1);
+  for (const c of controls()) {
+    ctx.textAlign = "center";
+    if (c.k === "fire") {
+      const on = fireBtn.id !== null, ready = reload <= 0;
+      ctx.globalAlpha = on ? 0.95 : 0.8;
+      ctx.fillStyle = ready ? (on ? "#f3cf7a" : "#d9a441") : "#7d6a42"; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.fill();
+      ctx.strokeStyle = A.col; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(c.x, c.y, c.r + 4, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - reload)); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = "#1d1a12"; ctx.font = "900 13px system-ui, sans-serif"; ctx.fillText("ВОГОНЬ", c.x, c.y + 1);
+      ctx.font = "800 10px system-ui, sans-serif"; ctx.fillText(A.short, c.x, c.y + 16);
+    } else if (c.k === "ammo") {
+      const left = ammoLeft(p, c.a), sel = c.a.id === p.ammo, none = left <= 0;
+      ctx.globalAlpha = none ? 0.35 : 0.92;
+      ctx.fillStyle = sel ? c.a.col : "rgba(10,14,13,.72)"; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.fill();
+      ctx.strokeStyle = c.a.col; ctx.lineWidth = sel ? 3 : 2; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.stroke();
+      ctx.fillStyle = sel ? "#1d1a12" : c.a.col; ctx.font = "900 11px system-ui, sans-serif"; ctx.fillText(c.a.short, c.x, c.y + (left === Infinity ? 4 : 0));
+      if (left !== Infinity) { ctx.font = "700 9px system-ui, sans-serif"; ctx.fillText(left, c.x, c.y + 11); }
+      if (!usingTouch) { ctx.globalAlpha = 0.7; ctx.fillStyle = "#e8e4d8"; ctx.font = "700 9px system-ui"; ctx.fillText(c.i + 1, c.x - c.r + 2, c.y - c.r + 6); }
+      ctx.globalAlpha = 1;
+    } else {
+      const n = WOV.profile.ammo.repair || 0, off = p.repairUsed || n <= 0;
+      ctx.globalAlpha = off ? 0.35 : 0.92;
+      ctx.fillStyle = "rgba(10,14,13,.72)"; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "#7fbf6b"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.stroke();
+      ctx.fillStyle = "#7fbf6b"; ctx.fillRect(c.x - 7, c.y - 6, 14, 4); ctx.fillRect(c.x - 2, c.y - 11, 4, 14);
+      ctx.font = "700 9px system-ui, sans-serif"; ctx.fillText(p.repairUsed ? "✓" : n, c.x, c.y + 14);
+      if (!usingTouch) { ctx.globalAlpha = 0.7; ctx.fillStyle = "#e8e4d8"; ctx.fillText("R", c.x - c.r + 2, c.y - c.r + 6); }
+      ctx.globalAlpha = 1;
+    }
+  }
+  if (p.autoAim) { ctx.globalAlpha = 0.55; ctx.fillStyle = "#d9a441"; ctx.font = "700 10px system-ui"; ctx.textAlign = "right"; ctx.fillText("автоприціл", W - 12, H - 12 - safeBottom()); ctx.globalAlpha = 1; }
+  if (B.ammoNote) {
+    const n = B.ammoNote; ctx.globalAlpha = clamp(n.t * 2, 0, 1); ctx.font = "800 13px system-ui, sans-serif"; ctx.textAlign = "center";
+    const w = ctx.measureText(n.text).width + 24, y = H - (usingTouch ? 230 : 130) - safeBottom();
+    ctx.fillStyle = "rgba(10,14,13,.78)"; WOV.rr(ctx, W / 2 - w / 2, y - 16, w, 24, 8); ctx.fill();
+    ctx.fillStyle = n.col; ctx.fillText(n.text, W / 2, y + 1); ctx.globalAlpha = 1;
   }
 }
 

@@ -115,6 +115,10 @@ WOV.CAMOS = [
   { id: "urban", name: "Місто", price: 90, colors: ["#6e7377", "#4a4e52", "#9599a0"] },
   { id: "night", name: "Ніч", price: 140, colors: ["#2c3240", "#1b1f29", "#454d60"] },
   { id: "tiger", name: "Тигр", price: 180, colors: ["#c48a3a", "#2b241a", "#d9a65a"] },
+  { id: "autumn", name: "Осінь", price: 100, colors: ["#8a5a2c", "#5a3a1c", "#b9853f"] },
+  { id: "navy", name: "Флот", price: 120, colors: ["#4f6478", "#33445a", "#7d93a8"] },
+  { id: "digital", name: "Цифровий", price: 160, colors: ["#6b745c", "#3f4637", "#9aa384"] },
+  { id: "carbon", name: "Карбон", price: 250, colors: ["#2a2d30", "#141618", "#4a4f55"] },
   { id: "gold", name: "Золото", price: 400, colors: ["#d9a441", "#a8761d", "#f3d27a"] },
 ];
 
@@ -126,11 +130,44 @@ WOV.BOXES = [
     crystals: [12, 35], coins: [400, 2200], camo: 0.08, prem: 0, boost: 0.1, desc: "12–35 кристалів, шанс на камуфляж" },
   { id: "gold", name: "Золотий", price: 7000, color: "#d9a441", rim: "#9c701e",
     crystals: [35, 90], coins: [1000, 5000], camo: 0.2, prem: 0.05, boost: 0.2, desc: "35–90 кристалів, шанс на преміум-техніку" },
+  { id: "ammo", name: "Арсенал", price: 1500, color: "#6f7d4f", rim: "#454f30",
+    crystals: [0, 4], coins: [0, 300], camo: 0, prem: 0, boost: 0, ammo: [3, 5], desc: "Преміум-снаряди і ремкомплекти" },
   { id: "legend", name: "Легендарний", price: 20000, color: "#9b6bd6", rim: "#5f3d92",
     crystals: [110, 260], coins: [3000, 12000], camo: 0.35, prem: 0.18, boost: 0.3, desc: "110–260 кристалів, великий шанс на преміум" },
 ];
-WOV.BOOST = { price: 60, battles: 5 };          // x2 coins for N battles, bought with crystals
-WOV.EXCHANGE = { crystals: 10, coins: 1000 };   // 10 crystals -> 1000 coins
+WOV.BOOSTS = [{ price: 60, battles: 5 }, { price: 150, battles: 15 }];  // x2 coins for N battles, bought with crystals
+WOV.BOOST = WOV.BOOSTS[0];
+WOV.EXCHANGES = [{ crystals: 10, coins: 1000 }, { crystals: 50, coins: 5500 }, { crystals: 150, coins: 18000 }];
+WOV.EXCHANGE = WOV.EXCHANGES[0];
+
+// ---------- ammunition ----------
+// dmg/speed are multipliers of the vehicle's gun; pen > 0 helps through armour, < 0 hurts;
+// splash = blast radius; mod/fire = multipliers for module damage and fire chance; stock = premium ammo bought in the shop
+WOV.AMMO = {
+  tank: [
+    { id: "ap", name: "Бронебійний", short: "ББ", col: "#f0dc9a", dmg: 1, speed: 1, pen: 0, desc: "Надійний снаряд проти броні. Безлімітний." },
+    { id: "he", name: "Фугасний", short: "ОФ", col: "#ff9a4a", dmg: 0.85, speed: 0.85, pen: -0.25, splash: 60, mod: 1.8, fire: 2, noRico: true, desc: "Не рикошетить, вибух зачіпає сусідів, частіше ламає модулі й підпалює. Слабший проти лобової броні." },
+    { id: "apcr", name: "Підкаліберний", short: "ПК", col: "#9fd8ff", dmg: 1, speed: 1.4, pen: 0.55, rico: 0.3, stock: "apcr", desc: "Дуже швидкий, пробиває навіть лоб важких танків і майже не рикошетить." },
+  ],
+  plane: [
+    { id: "mg", name: "Кулі", short: "КУЛ", col: "#ffe29a", dmg: 1, speed: 1, desc: "Звичайні кулі. Безлімітні." },
+    { id: "inc", name: "Запальні", short: "ЗАП", col: "#ff7a3a", dmg: 1.15, speed: 1, fire: 7, mod: 1.5, stock: "inc", desc: "+15% шкоди і часто підпалюють ціль." },
+    { id: "rkt", name: "Ракети", short: "РАК", col: "#ffd36a", rocket: true, limit: 6, desc: "Потужний удар по танках і кораблях. 6 ракет на бій, по літаках не влучають." },
+  ],
+  ship: [
+    { id: "ap", name: "Бронебійний", short: "ББ", col: "#f0dc9a", dmg: 1, speed: 1, pen: 0, desc: "Основний снаряд головного калібру. Безлімітний." },
+    { id: "he", name: "Фугасний", short: "ОФ", col: "#ff9a4a", dmg: 0.8, speed: 0.9, pen: -0.2, splash: 80, mod: 1.6, fire: 3, noRico: true, desc: "Не рикошетить, вибух по площі і часті пожежі." },
+    { id: "heavy", name: "Надважкий", short: "НВ", col: "#c9a8ff", dmg: 1.35, speed: 0.9, pen: 0.3, stock: "heavy", desc: "+35% шкоди і краще пробиття броні." },
+  ],
+};
+WOV.STOCK = {
+  apcr: { name: "Підкаліберні снаряди", kind: "tank", packs: [{ n: 20, coins: 1200 }, { n: 60, coins: 3000 }] },
+  inc: { name: "Запальні кулі", kind: "plane", packs: [{ n: 300, coins: 1000 }, { n: 1000, coins: 2800 }] },
+  heavy: { name: "Надважкі снаряди", kind: "ship", packs: [{ n: 15, coins: 1400 }, { n: 45, coins: 3500 }] },
+  repair: { name: "Ремкомплект", kind: null, packs: [{ n: 3, coins: 900 }, { n: 10, coins: 2500 }] },
+};
+WOV.START_STOCK = { apcr: 10, inc: 200, heavy: 6, repair: 2 };
+WOV.DAILY_GIFT = { hours: 20, coins: [300, 900], crystalsChance: 0.35, crystals: [3, 10] };
 WOV.FRIEND_BONUS = 1500; WOV.REF_BONUS = 3000; WOV.MAX_FRIEND_REWARDS = 10;
 
 WOV.MODES = {
