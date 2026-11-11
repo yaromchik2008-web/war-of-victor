@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>War of Victor</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="battleUi" class="hidden">
+  <button id="exitBattle" class="icon-btn" aria-label="Вийти з бою">✕</button>
+  <button id="battleSnd" class="icon-btn" aria-label="Звук" data-ico="sound"></button>
+</div>
+
+<div id="app">
+  <div id="splash" class="splash">
+    <div class="logo">WAR OF <span>VICTOR</span></div>
+    <div class="splash-sub">танки · літаки · кораблі</div>
+    <div class="loader"><i></i></div>
+  </div>
+
+  <header class="topbar">
+    <div class="player" id="playerChip">
+      <div class="avatar" id="avatar">К</div>
+      <div class="pinfo"><b id="pname">Командир</b><div class="lvl"><span id="plvl">Рів. 1</span><i><em id="pxp"></em></i></div></div>
+    </div>
+    <div class="wallet">
+      <button class="snd" id="sndBtn" aria-label="Звуки" data-ico="sound"></button>
+      <button class="snd" id="musBtn" aria-label="Музика" data-ico="music"></button>
+      <div class="pill coins"><span class="ico" data-ico="coin"></span><b id="coins">0</b></div>
+      <div class="pill crystals"><span class="ico" data-ico="crystal"></span><b id="crystals">0</b></div>
+    </div>
+  </header>
+
+  <main id="screens">
+    <!-- HANGAR -->
+    <section id="scr-hangar" class="screen active">
+      <div class="seg" id="hangarCls"></div>
+      <div class="stage">
+        <div class="platform"></div>
+        <canvas id="hangarCanvas"></canvas>
+        <div class="vtitle"><span class="tier" id="hTier">I</span><b id="hName">—</b><small id="hMeta"></small></div>
+      </div>
+      <div class="stats" id="hStats"></div>
+      <div class="row-title">Твоя техніка</div>
+      <div class="carousel" id="hOwned"></div>
+      <div class="row-title">Камуфляж</div>
+      <div class="camos" id="hCamos"></div>
+      <div class="battle-box">
+        <div class="modes" id="modes"></div>
+        <button class="btn-battle" id="toBattle"><span>В БІЙ</span><small id="boostInfo"></small></button>
+      </div>
+    </section>
+
+    <!-- TECH TREE -->
+    <section id="scr-tree" class="screen">
+      <div class="screen-title">Дослідження техніки</div>
+      <div class="seg" id="treeCls"></div>
+      <div class="tree" id="tree"></div>
+    </section>
+
+    <!-- SHOP -->
+    <section id="scr-shop" class="screen">
+      <div class="screen-title">Магазин</div>
+      <div class="row-title">Бокси</div>
+      <div class="boxes" id="boxes"></div>
+      <div class="row-title">Преміум-техніка</div>
+      <div class="prem" id="premList"></div>
+      <div class="row-title">Камуфляжі</div>
+      <div class="camo-shop" id="camoShop"></div>
+      <div class="row-title">Інше</div>
+      <div class="misc" id="misc"></div>
+    </section>
+
+    <!-- FRIENDS -->
+    <section id="scr-friends" class="screen">
+      <div class="screen-title">Друзі</div>
+      <div class="card invite">
+        <div class="invite-top"><div><small>Твій код</small><b id="myCode">—</b></div><button class="btn-sec" id="copyCode">Копіювати</button></div>
+        <p>Запроси друзів: вони отримають <b id="refBonusTxt"></b> монет на старт, а ти по <b id="friendBonusTxt"></b> за кожного доданого друга. Друзі воюють у твоїй команді в командних боях.</p>
+        <button class="btn-main" id="inviteBtn">Запросити в Telegram</button>
+      </div>
+      <div class="card add-friend">
+        <input id="friendCode" maxlength="16" placeholder="Код друга" autocomplete="off">
+        <input id="friendName" maxlength="20" placeholder="Ім'я (необов'язково)" autocomplete="off">
+        <button class="btn-sec" id="addFriend">Додати</button>
+      </div>
+      <div class="row-title">Список друзів <span id="friendCount"></span></div>
+      <div class="friends" id="friendsList"></div>
+      <div class="row-title">Твоя статистика</div>
+      <div class="card stats-card" id="myStats"></div>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="hangar" class="active"><span data-ico="hangar"></span>Ангар</button>
+    <button data-tab="tree"><span data-ico="tree"></span>Техніка</button>
+    <button data-tab="shop"><span data-ico="shop"></span>Магазин</button>
+    <button data-tab="friends"><span data-ico="friends"></span>Друзі</button>
+  </nav>
+</div>
+
+<div id="modal" class="modal hidden"><div class="sheet" id="sheet"></div></div>
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/data.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/draw.js"></script>
+<script src="js/map.js"></script>
+<script src="js/game.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

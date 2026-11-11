@@ -1,0 +1,367 @@
+// War of Victor: menus (hangar, tech tree, shop, friends), boxes and battle results
+(function () {
+"use strict";
+const WOV = window.WOV;
+const $ = s => document.querySelector(s);
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
+const fmt = n => Math.round(n).toLocaleString("uk-UA").replace(/ /g, " ");
+const tg = WOV.tg;
+
+const ICONS = {
+  coin: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#e0ac45"/><circle cx="12" cy="12" r="7.5" fill="#f3cf7a"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="#b9862a" stroke-width="1.2"/><path d="M12 7.2l1.4 2.9 3.2.4-2.3 2.2.6 3.1-2.9-1.5-2.9 1.5.6-3.1-2.3-2.2 3.2-.4z" fill="#b9862a"/></svg>',
+  crystal: '<svg viewBox="0 0 24 24"><path d="M6 3h12l4 6-10 13L2 9z" fill="#4aa7dc"/><path d="M6 3h12l4 6H2z" fill="#8fd6fa"/><path d="M8.5 9L12 22 15.5 9z" fill="#6fc3f0"/><path d="M6 3l2.5 6L12 3l3.5 6L18 3" fill="none" stroke="#d9f2ff" stroke-width=".8"/></svg>',
+  boost: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="#f3cf7a"/></svg>',
+  camo: '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" fill="#5b6b3c"/><circle cx="8" cy="9" r="4" fill="#33402a"/><circle cx="16" cy="15" r="5" fill="#8a7a4c"/></svg>',
+  vehicle: '<svg viewBox="0 0 24 24"><rect x="3" y="12" width="18" height="6" rx="2" fill="#a27be0"/><rect x="7" y="8" width="8" height="5" rx="2" fill="#c7a8f5"/><rect x="14" y="9.5" width="8" height="2" fill="#c7a8f5"/></svg>',
+  lock: '<svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2" fill="currentColor"/><path d="M8 10V7a4 4 0 018 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  hangar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 20V9l9-5 9 5v11"/><path d="M7 20v-6h10v6"/></svg>',
+  tree: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="5" rx="1.5"/><rect x="3" y="16" width="6" height="5" rx="1.5"/><rect x="15" y="16" width="6" height="5" rx="1.5"/><path d="M12 8v4M6 16v-4h12v4"/></svg>',
+  shop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 8h16l-1.5 12h-13z"/><path d="M8 8a4 4 0 018 0"/></svg>',
+  sound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>',
+  music: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 17.5V5.5l11-2.5v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6.5" cy="17.5" r="2.8"/><circle cx="17.5" cy="15" r="2.8"/></svg>',
+  friends: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-4 3.4-6 6.5-6s5.7 2 6.5 6"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.2c2.8.1 4.8 1.9 5.5 5.3"/></svg>',
+};
+WOV.ICONS = ICONS;
+document.querySelectorAll("[data-ico]").forEach(e => { e.innerHTML = ICONS[e.dataset.ico] || ""; });
+const priceHtml = (cur, n) => '<span class="price">' + ICONS[cur === "coins" ? "coin" : "crystal"] + fmt(n) + "</span>";
+
+function toast(msg, ms) {
+  const t = $("#toast"); t.textContent = msg; t.classList.remove("hidden");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add("hidden"), ms || 2200);
+}
+WOV.toast = toast;
+
+// ---------- wallet / player ----------
+let lastCoins = null, lastCr = null;
+function renderWallet() {
+  const p = WOV.profile;
+  $("#coins").textContent = fmt(p.coins); $("#crystals").textContent = fmt(p.crystals);
+  if (lastCoins !== null && lastCoins !== p.coins) bump(".pill.coins");
+  if (lastCr !== null && lastCr !== p.crystals) bump(".pill.crystals");
+  lastCoins = p.coins; lastCr = p.crystals;
+  const L = WOV.level();
+  $("#pname").textContent = p.name; $("#avatar").textContent = (p.name[0] || "К").toUpperCase();
+  $("#plvl").textContent = "Рів. " + L.lvl; $("#pxp").style.width = Math.round(L.cur / L.need * 100) + "%";
+}
+function bump(sel) { const e = $(sel); e.classList.remove("bump"); void e.offsetWidth; e.classList.add("bump"); }
+WOV.on("wallet", () => { renderWallet(); });
+
+// ---------- tabs ----------
+let tab = "hangar";
+function setTab(t) {
+  tab = t;
+  document.querySelectorAll(".tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === t));
+  document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === "scr-" + t));
+  if (t === "hangar") renderHangar(); else if (t === "tree") renderTree(); else if (t === "shop") renderShop(); else renderFriends();
+  WOV.haptic("select");
+}
+document.querySelectorAll(".tabbar button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+
+function segment(container, value, onChange) {
+  container.innerHTML = "";
+  for (const k of ["tank", "plane", "ship"]) {
+    const b = el("button", k === value ? "active" : "", WOV.KIND_NAME[k]);
+    b.onclick = () => { onChange(k); WOV.haptic("select"); };
+    container.appendChild(b);
+  }
+}
+
+// ---------- stat normalisation ----------
+function statsOf(v) {
+  const same = WOV.VEHICLES.filter(o => o.kind === v.kind);
+  const max = f => Math.max(...same.map(f));
+  const dps = o => o.dmg / o.reload;
+  const rows = [
+    ["Швидкість", v.speed + (v.kind === "plane" ? " км/г" : " км/г"), v.speed / max(o => o.speed)],
+    ["Міцність", v.hp, v.hp / max(o => o.hp)],
+    ["Вогонь", Math.round(dps(v)) + "/с", dps(v) / max(dps)],
+  ];
+  if (v.kind === "plane") rows.push(["Маневр", v.turn.toFixed(1), v.turn / max(o => o.turn)]);
+  else rows.push(["Броня лоба", Math.round((1 - v.armor[0]) * 100) + "%", (1 - v.armor[0]) / max(o => 1 - o.armor[0])]);
+  rows.push(["Дальність", Math.round(v.shell * v.range) + " м", (v.shell * v.range) / max(o => o.shell * o.range)]);
+  rows.push(["Ранг", WOV.ROMAN[v.tier], v.tier / 7]);
+  return rows.map(([n, val, k]) => '<div class="stat"><div><span>' + n + "</span><b>" + val + '</b></div><i style="--v:' + Math.round(Math.max(0.06, Math.min(1, k)) * 100) + '%"></i></div>').join("");
+}
+const roleName = { light: "легкий танк", medium: "середній танк", heavy: "важкий танк", mbt: "основний бойовий танк", fighter: "винищувач", attacker: "штурмовик", heavy_plane: "важкий винищувач", boat: "торпедний катер", destroyer: "есмінець", cruiser: "крейсер", battleship: "лінкор" };
+const roleOf = v => v.kind === "plane" && v.role === "heavy" ? roleName.heavy_plane : roleName[v.role];
+
+// ---------- hangar ----------
+let hangarAngle = -Math.PI / 2, hangarRaf = 0, mode = "team";
+function renderHangar() {
+  const p = WOV.profile, v = WOV.currentVehicle();
+  segment($("#hangarCls"), p.cls, k => { p.cls = k; WOV.save(); renderHangar(); });
+  $("#hTier").textContent = WOV.ROMAN[v.tier]; $("#hTier").className = "tier" + (v.prem ? " prem" : "");
+  $("#hName").textContent = v.name; $("#hMeta").textContent = v.nation + " · " + roleOf(v) + (v.prem ? " · преміум" : "");
+  $("#hStats").innerHTML = statsOf(v);
+  const owned = WOV.VEHICLES.filter(o => o.kind === p.cls && WOV.owns(o.id)).sort((a, b) => a.tier - b.tier);
+  const car = $("#hOwned"); car.innerHTML = "";
+  for (const o of owned) {
+    const c = el("button", "vcard" + (o.id === v.id ? " sel" : ""), '<span class="tier' + (o.prem ? " prem" : "") + '">' + WOV.ROMAN[o.tier] + "</span><canvas></canvas><b>" + o.name + "</b>");
+    c.onclick = () => { p.sel[p.cls] = o.id; WOV.save(); renderHangar(); WOV.haptic("select"); };
+    car.appendChild(c); WOV.preview(c.querySelector("canvas"), o, { fill: 0.9, angle: -0.5, tAngle: -0.2, camo: WOV.camoOf(o) });
+  }
+  const add = el("button", "vcard add", "+ Нова<br>техніка"); add.onclick = () => { treeCls = p.cls; setTab("tree"); }; car.appendChild(add);
+  const cs = $("#hCamos"); cs.innerHTML = "";
+  for (const cm of WOV.CAMOS.filter(c => p.camos.includes(c.id))) {
+    const b = el("button", "camo" + (WOV.camoOf(v).id === cm.id ? " sel" : ""), "<span></span>");
+    b.firstChild.style.background = swatchBg(cm, v); b.title = cm.name;
+    b.onclick = () => { p.camoSel[v.id] = cm.id; WOV.save(); renderHangar(); WOV.haptic("select"); };
+    cs.appendChild(b);
+  }
+  const shopCamo = el("button", "camo", '<span style="display:grid;place-items:center;color:var(--muted);font-size:20px">+</span>'); shopCamo.onclick = () => setTab("shop"); cs.appendChild(shopCamo);
+  const ms = $("#modes"); ms.innerHTML = "";
+  for (const id of ["quick", "team"]) {
+    const m = WOV.MODES[id], b = el("button", "mode" + (mode === id ? " sel" : ""), "<b>" + m.name + "</b><small>" + m.desc + "</small>");
+    b.onclick = () => { mode = id; renderHangar(); WOV.haptic("select"); }; ms.appendChild(b);
+  }
+  $("#boostInfo").textContent = p.boost > 0 ? "×2 монет ще на " + p.boost + " боїв" : v.name + " · ранг " + WOV.ROMAN[v.tier];
+  cancelAnimationFrame(hangarRaf);
+  const spinStage = () => {
+    if (tab !== "hangar" || WOV.Battle.active()) return;
+    hangarAngle += 0.004;
+    WOV.preview($("#hangarCanvas"), v, { fill: v.kind === "ship" ? 0.95 : 0.7, angle: hangarAngle, tAngle: hangarAngle + Math.sin(hangarAngle * 3) * 0.5, camo: WOV.camoOf(v) });
+    hangarRaf = requestAnimationFrame(spinStage);
+  };
+  spinStage();
+}
+function swatchBg(cm, v) {
+  const c = cm.colors || [v ? v.look.color : "#6f7d4f", "#555", "#777"];
+  return "radial-gradient(circle at 30% 30%, " + c[1] + " 0 22%, transparent 23%), radial-gradient(circle at 75% 70%, " + c[2] + " 0 26%, transparent 27%), " + c[0];
+}
+$("#toBattle").onclick = () => startBattle();
+
+// ---------- tech tree ----------
+let treeCls = "tank";
+function renderTree() {
+  segment($("#treeCls"), treeCls, k => { treeCls = k; renderTree(); });
+  const tree = $("#tree"); tree.innerHTML = "";
+  const list = WOV.VEHICLES.filter(v => v.kind === treeCls && !v.prem);
+  for (let t = 1; t <= 7; t++) {
+    const row = el("div", "tier-row", '<div class="tier-label">' + WOV.ROMAN[t] + '</div><div class="tier-cards"></div>');
+    for (const v of list.filter(v => v.tier === t)) row.lastChild.appendChild(treeCard(v));
+    tree.appendChild(row);
+  }
+  const prem = WOV.VEHICLES.filter(v => v.kind === treeCls && v.prem);
+  if (prem.length) {
+    const row = el("div", "tier-row", '<div class="tier-label" style="color:var(--purple)">★</div><div class="tier-cards"></div>');
+    for (const v of prem) row.lastChild.appendChild(treeCard(v));
+    tree.appendChild(row);
+  }
+}
+function treeCard(v) {
+  const owned = WOV.owns(v.id), avail = WOV.canUnlock(v), sel = WOV.profile.sel[v.kind] === v.id;
+  const cls = "tcard " + (owned ? "owned" : avail ? "avail" : "locked") + (sel ? " sel" : "");
+  let state;
+  if (owned) state = sel ? "В АНГАРІ ✓" : "ОТРИМАНО";
+  else if (v.prem) state = ICONS.crystal + fmt(v.prem);
+  else if (avail) state = ICONS.coin + fmt(WOV.priceOf(v));
+  else state = ICONS.lock + fmt(WOV.priceOf(v));
+  const c = el("button", cls, "<canvas></canvas><b>" + v.name + "</b><small>" + roleOf(v) + '</small><div class="state">' + state + "</div>");
+  c.onclick = () => vehicleSheet(v);
+  setTimeout(() => WOV.preview(c.querySelector("canvas"), v, { fill: 0.92, angle: -0.6, tAngle: -0.3 }), 0);
+  return c;
+}
+
+// ---------- modal ----------
+function openSheet(html, onOpen) {
+  $("#sheet").innerHTML = html; $("#modal").classList.remove("hidden");
+  if (tg && tg.BackButton) tg.BackButton.show();
+  onOpen && onOpen($("#sheet"));
+}
+function closeSheet() { $("#modal").classList.add("hidden"); if (tg && tg.BackButton && !WOV.Battle.active()) tg.BackButton.hide(); }
+$("#modal").addEventListener("click", e => { if (e.target.id === "modal" && !$("#modal").dataset.lock) closeSheet(); });
+WOV.closeSheet = closeSheet;
+
+function vehicleSheet(v) {
+  const owned = WOV.owns(v.id), avail = WOV.canUnlock(v), p = WOV.profile;
+  let action;
+  if (owned) action = '<button class="btn-main" id="vsSel">' + (p.sel[v.kind] === v.id ? "Вже в ангарі" : "Обрати в ангар") + "</button>";
+  else if (v.prem) action = '<button class="btn-main" id="vsBuy">Купити за ' + fmt(v.prem) + " кристалів</button>";
+  else if (avail) action = '<button class="btn-main" id="vsBuy">Купити за ' + fmt(WOV.priceOf(v)) + " монет</button>";
+  else action = '<button class="btn-sec" disabled style="width:100%">Спершу отримай техніку рангу ' + WOV.ROMAN[v.tier - 1] + "</button>";
+  openSheet('<h2><span class="tier' + (v.prem ? " prem" : "") + '">' + WOV.ROMAN[v.tier] + "</span> " + v.name + '</h2><div class="sub">' + v.nation + " · " + roleOf(v) + "</div>" +
+    '<canvas class="big"></canvas><div class="stats">' + statsOf(v) + '</div><div class="actions">' + action + "</div>", s => {
+    WOV.preview(s.querySelector("canvas.big"), v, { fill: 0.75, angle: -0.5, tAngle: -0.15, camo: owned ? WOV.camoOf(v) : null });
+    const sel = s.querySelector("#vsSel"); if (sel) sel.onclick = () => { p.sel[v.kind] = v.id; p.cls = v.kind; WOV.save(); closeSheet(); setTab("hangar"); toast(v.name + " в ангарі"); };
+    const buy = s.querySelector("#vsBuy"); if (buy) buy.onclick = () => buyVehicle(v);
+  });
+}
+function buyVehicle(v) {
+  const cur = v.prem ? "crystals" : "coins", price = v.prem || WOV.priceOf(v);
+  if (!WOV.spend(cur, price)) { WOV.haptic("error"); toast(cur === "coins" ? "Не вистачає монет. Заробляй у боях!" : "Не вистачає кристалів. Відкривай бокси!"); return; }
+  const p = WOV.profile; p.owned.push(v.id); p.sel[v.kind] = v.id; p.cls = v.kind; WOV.save();
+  WOV.haptic("success"); if (A) A.sfx("coin"); closeSheet(); toast("Нова техніка: " + v.name + "!");
+  if (tab === "tree") renderTree(); else if (tab === "shop") renderShop();
+}
+
+// ---------- shop ----------
+function boxArt(b) { return '<div class="boxart" style="--c:' + b.color + ";--r:" + b.rim + '"><div class="body"></div><div class="lid"></div><div class="band"></div><div class="lock"></div></div>'; }
+function renderShop() {
+  const p = WOV.profile;
+  const bx = $("#boxes"); bx.innerHTML = "";
+  for (const b of WOV.BOXES) {
+    const c = el("button", "box", boxArt(b) + "<b>" + b.name + "</b><small>" + b.desc + "</small>" + priceHtml("coins", b.price));
+    c.style.setProperty("--glow", b.color);
+    c.onclick = () => buyBox(b); bx.appendChild(c);
+  }
+  const pl = $("#premList"); pl.innerHTML = "";
+  for (const v of WOV.VEHICLES.filter(v => v.prem)) {
+    const owned = WOV.owns(v.id);
+    const c = el("button", "shopitem" + (owned ? " owned" : ""), "<canvas></canvas><b>" + v.name + " · " + WOV.ROMAN[v.tier] + "</b>" + (owned ? '<span class="price">Отримано ✓</span>' : priceHtml("crystals", v.prem)));
+    c.onclick = () => vehicleSheet(v); pl.appendChild(c);
+    WOV.preview(c.querySelector("canvas"), v, { fill: 0.9, angle: -0.5, tAngle: -0.2 });
+  }
+  const cs = $("#camoShop"); cs.innerHTML = "";
+  for (const cm of WOV.CAMOS.filter(c => c.price > 0)) {
+    const owned = p.camos.includes(cm.id);
+    const c = el("button", "shopitem" + (owned ? " owned" : ""), '<div class="swatch"></div><b>' + cm.name + "</b>" + (owned ? '<span class="price">✓</span>' : priceHtml("crystals", cm.price)));
+    c.style.padding = "6px"; c.querySelector(".swatch").style.background = swatchBg(cm);
+    c.onclick = () => {
+      if (owned) { toast("Обери камуфляж в ангарі"); return; }
+      if (!WOV.spend("crystals", cm.price)) { WOV.haptic("error"); toast("Не вистачає кристалів"); return; }
+      p.camos.push(cm.id); p.camoSel[WOV.currentVehicle().id] = cm.id; WOV.save(); WOV.haptic("success"); toast("Камуфляж «" + cm.name + "» наведено на " + WOV.currentVehicle().name); renderShop();
+    };
+    cs.appendChild(c);
+  }
+  const misc = $("#misc"); misc.innerHTML = "";
+  const boost = el("button", "shopitem", '<div style="height:46px;display:grid;place-items:center">' + ICONS.boost.replace("<svg", '<svg width="40" height="40"') + "</div><b>×2 монет на " + WOV.BOOST.battles + " боїв</b>" + priceHtml("crystals", WOV.BOOST.price));
+  boost.onclick = () => { if (!WOV.spend("crystals", WOV.BOOST.price)) { WOV.haptic("error"); toast("Не вистачає кристалів"); return; } p.boost += WOV.BOOST.battles; WOV.save(); WOV.haptic("success"); toast("Бустер активовано: ×2 монет на " + p.boost + " боїв"); };
+  const ex = el("button", "shopitem", '<div style="height:46px;display:flex;align-items:center;justify-content:center;gap:6px">' + ICONS.crystal.replace("<svg", '<svg width="30" height="30"') + "<b style='margin:0'>→</b>" + ICONS.coin.replace("<svg", '<svg width="30" height="30"') + "</div><b>" + WOV.EXCHANGE.crystals + " кристалів → " + fmt(WOV.EXCHANGE.coins) + " монет</b>" + priceHtml("crystals", WOV.EXCHANGE.crystals));
+  ex.onclick = () => { if (!WOV.spend("crystals", WOV.EXCHANGE.crystals)) { WOV.haptic("error"); toast("Не вистачає кристалів"); return; } WOV.give("coins", WOV.EXCHANGE.coins); WOV.haptic("success"); toast("+" + fmt(WOV.EXCHANGE.coins) + " монет"); };
+  misc.appendChild(boost); misc.appendChild(ex);
+}
+
+function buyBox(b) {
+  if (WOV.profile.coins < b.price) { WOV.haptic("error"); toast("Не вистачає монет: потрібно " + fmt(b.price)); return; }
+  WOV.spend("coins", b.price);
+  $("#modal").dataset.lock = "1";
+  openSheet('<div class="opening" style="--glow:' + b.color + '"><h2>' + b.name + ' бокс</h2><div class="sub">Відкриваємо…</div><div id="openBox" class="shake">' + boxArt(b) + '</div><div class="rewards" id="rewards"></div><div class="actions hidden" id="openActions"><button class="btn-sec" id="obClose">Готово</button><button class="btn-main" id="obAgain">Ще один · ' + fmt(b.price) + "</button></div></div>");
+  WOV.haptic("medium");
+  const rewards = WOV.openBox(b);
+  if (A) A.sfx("box");
+  setTimeout(() => WOV.haptic("heavy"), 450);
+  setTimeout(() => {
+    const ob = $("#openBox"); if (!ob) return;
+    ob.outerHTML = '<div class="burst"></div>';
+    $(".opening .sub").textContent = "Твоя здобич";
+    if (A) A.sfx("reward");
+    WOV.haptic("success");
+    const box = $("#rewards");
+    rewards.forEach((r, i) => {
+      let ico, val, label, epic = false;
+      if (r.type === "crystals") { ico = ICONS.crystal; val = "+" + fmt(r.amount); label = r.note || "кристалів"; }
+      else if (r.type === "coins") { ico = ICONS.coin; val = "+" + fmt(r.amount); label = "монет"; }
+      else if (r.type === "camo") { ico = ICONS.camo; val = r.label; label = "камуфляж"; epic = true; }
+      else if (r.type === "boost") { ico = ICONS.boost; val = "×2"; label = "монет на " + r.amount + " бої"; epic = true; }
+      else { ico = ICONS.vehicle; val = r.label; label = "преміум-техніка!"; epic = true; }
+      const e = el("div", "reward" + (epic ? " epic" : ""), ico + "<b>" + val + "</b><small>" + label + "</small>");
+      e.style.animationDelay = (i * 0.18) + "s"; box.appendChild(e);
+    });
+    $("#openActions").classList.remove("hidden");
+    $("#obClose").onclick = () => { delete $("#modal").dataset.lock; closeSheet(); renderShop(); };
+    $("#obAgain").onclick = () => { delete $("#modal").dataset.lock; buyBox(b); };
+  }, 950);
+}
+
+// ---------- friends ----------
+function renderFriends() {
+  const p = WOV.profile;
+  $("#myCode").textContent = p.code; $("#refBonusTxt").textContent = fmt(WOV.REF_BONUS); $("#friendBonusTxt").textContent = fmt(WOV.FRIEND_BONUS);
+  const list = $("#friendsList"); list.innerHTML = "";
+  $("#friendCount").textContent = p.friends.length ? "· " + p.friends.length : "";
+  if (!p.friends.length) list.appendChild(el("div", "empty", "Поки що порожньо. Запроси друзів або додай їх за кодом."));
+  for (const f of p.friends) {
+    const row = el("div", "friend", '<div class="avatar">' + (f.name[0] || "?").toUpperCase() + "</div><div><b></b><small>код " + f.code + (f.viaInvite ? " · запросив тебе" : "") + '</small></div><button aria-label="Видалити">✕</button>');
+    row.querySelector("b").textContent = f.name;
+    row.querySelector("button").onclick = () => { p.friends = p.friends.filter(x => x !== f); WOV.save(); renderFriends(); };
+    list.appendChild(row);
+  }
+  const s = p.stats, wr = s.battles ? Math.round(s.wins / s.battles * 100) : 0;
+  $("#myStats").innerHTML = "<div><b>" + s.battles + "</b><small>боїв</small></div><div><b>" + wr + "%</b><small>перемог</small></div><div><b>" + s.kills + "</b><small>знищено</small></div><div><b>" + WOV.level().lvl + "</b><small>рівень</small></div>";
+}
+$("#copyCode").onclick = () => copy(WOV.inviteLink(), "Посилання-запрошення скопійовано");
+$("#inviteBtn").onclick = () => {
+  const link = WOV.inviteLink(), text = "Го в War of Victor! Танки, літаки й кораблі в одному бою. Мій код: " + WOV.profile.code;
+  const share = "https://t.me/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent(text);
+  if (tg && tg.openTelegramLink) { try { tg.openTelegramLink(share); return; } catch (e) {} }
+  copy(link + "\n" + text, "Запрошення скопійовано: надішли його другу");
+};
+$("#addFriend").onclick = () => {
+  const p = WOV.profile, code = $("#friendCode").value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const name = $("#friendName").value.trim() || "Друг " + code.slice(-4);
+  if (code.length < 4) { toast("Введи код друга (його видно в розділі «Друзі»)"); return; }
+  if (code === p.code) { toast("Це твій власний код 🙂"); return; }
+  if (p.friends.some(f => f.code === code)) { toast("Цей друг уже в списку"); return; }
+  p.friends.push({ code, name, since: Date.now() });
+  let msg = name + " тепер у друзях";
+  if (p.friendRewards < WOV.MAX_FRIEND_REWARDS) { p.friendRewards++; p.coins += WOV.FRIEND_BONUS; msg += " · +" + fmt(WOV.FRIEND_BONUS) + " монет"; WOV.emit("wallet"); }
+  WOV.save(); WOV.haptic("success"); toast(msg);
+  $("#friendCode").value = ""; $("#friendName").value = ""; renderFriends();
+};
+function copy(text, msg) {
+  const done = () => toast(msg);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+  else fallbackCopy(text, done);
+}
+function fallbackCopy(text, done) { const t = el("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e) {} t.remove(); done(); }
+
+// ---------- battle flow ----------
+function startBattle() {
+  WOV.haptic("heavy");
+  cancelAnimationFrame(hangarRaf);
+  $("#app").classList.add("in-battle");
+  if (tg && tg.BackButton) tg.BackButton.show();
+  WOV.Battle.start(mode, showResult);
+}
+function askLeave() {
+  const go = () => WOV.Battle.leave();
+  if (tg && tg.showConfirm && tg.isVersionAtLeast && tg.isVersionAtLeast("6.2")) tg.showConfirm("Вийти з бою? Бій зарахується за поточним станом.", ok => { if (ok) go(); });
+  else go();
+}
+$("#exitBattle").onclick = askLeave;
+function showResult(s) {
+  $("#app").classList.remove("in-battle");
+  setTab("hangar");
+  const rows = s.board.map(u => '<tr class="' + (u.me ? "me " : "") + (u.dead ? "dead" : "") + '"><td class="t' + u.team + '">' + escapeHtml(u.name) + '</td><td style="color:var(--muted)">' + u.v + "</td><td>" + u.kills + "</td><td>" + u.dmg + "</td></tr>").join("");
+  openSheet('<div class="result-head ' + s.result + '">' + (s.result === "win" ? "ПЕРЕМОГА" : "ПОРАЗКА") + '</div><div class="sub" style="text-align:center">' + s.mode + (s.survived ? " · вцілів" : " · знищено") + "</div>" +
+    '<div class="earn"><div><b id="earnCoins">0</b><small>монет' + (s.boosted ? " ×2" : "") + "</small></div><div><b>" + s.kills + "</b><small>знищено</small></div><div><b>" + s.dmg + "</b><small>шкоди</small></div><div><b>+" + s.xp + "</b><small>досвіду</small></div></div>" +
+    '<table class="board"><tr style="color:var(--muted)"><td>Гравець</td><td>Техніка</td><td>✕</td><td>Шкода</td></tr>' + rows + "</table>" +
+    '<div class="actions"><button class="btn-sec" id="resClose">В ангар</button><button class="btn-main" id="resAgain">Ще бій</button></div>', sh => {
+    const e = sh.querySelector("#earnCoins"), t0 = performance.now();
+    const tick = now => { const k = Math.min(1, (now - t0) / 900); e.textContent = "+" + fmt(s.coins * k); if (k < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    sh.querySelector("#resClose").onclick = closeSheet;
+    sh.querySelector("#resAgain").onclick = () => { closeSheet(); startBattle(); };
+  });
+}
+const escapeHtml = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+if (tg && tg.BackButton) tg.BackButton.onClick(() => {
+  if (WOV.Battle.active()) askLeave();
+  else if (!$("#modal").classList.contains("hidden") && !$("#modal").dataset.lock) closeSheet();
+  else if (tab !== "hangar") setTab("hangar");
+});
+
+// ---------- sound ----------
+const A = WOV.Audio;
+function renderSound() {
+  const p = WOV.profile;
+  $("#sndBtn").classList.toggle("off", !p.sound); $("#musBtn").classList.toggle("off", !p.music); $("#battleSnd").classList.toggle("off", !p.sound && !p.music);
+  if (A) { A.setSound(p.sound); A.setMusic(p.music); }
+}
+$("#sndBtn").onclick = e => { e.stopPropagation(); WOV.profile.sound = !WOV.profile.sound; WOV.save(); renderSound(); toast(WOV.profile.sound ? "Звуки увімкнено" : "Звуки вимкнено", 1200); };
+$("#musBtn").onclick = e => { e.stopPropagation(); WOV.profile.music = !WOV.profile.music; WOV.save(); renderSound(); toast(WOV.profile.music ? "Музику увімкнено" : "Музику вимкнено", 1200); };
+$("#battleSnd").onclick = () => { const p = WOV.profile, on = !(p.sound || p.music); p.sound = p.music = on; WOV.save(); renderSound(); };
+// soft click on every menu button
+document.addEventListener("click", e => { if (A && e.target.closest("#app button, #modal button") && !e.target.closest("#toBattle")) A.sfx("click", { vol: 0.6 }); }, true);
+
+// ---------- boot ----------
+if (tg) { try { tg.ready(); tg.expand(); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); tg.setHeaderColor("#121615"); tg.setBackgroundColor("#121615"); } catch (e) {} }
+WOV.load(() => {
+  renderWallet(); renderSound();
+  treeCls = WOV.profile.cls;
+  setTab("hangar");
+  setTimeout(() => $("#splash").classList.add("gone"), 350);
+  if (WOV.pendingToast) setTimeout(() => toast(WOV.pendingToast, 3500), 600);
+});
+})();
