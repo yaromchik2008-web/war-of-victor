@@ -31,11 +31,11 @@ jobs:
       - name: Link project
         run: supabase link --project-ref "$PROJECT_REF"
       - name: Database tables
-        run: yes | supabase db push --remote --password "$SUPABASE_DB_PASSWORD"
+        run: supabase db push --remote --yes --password "$SUPABASE_DB_PASSWORD"
       - name: Function secrets
         run: supabase secrets set --project-ref "$PROJECT_REF" BOT_TOKEN="$BOT_TOKEN" GAME_URL="$GAME_URL"
       - name: Functions
-        run: supabase functions deploy --project-ref "$PROJECT_REF" --no-verify-jwt
+        run: supabase functions deploy --project-ref "$PROJECT_REF" --no-verify-jwt --yes
       - name: Bot webhook
         run: |
           SECRET=$(printf '%s' "wov-webhook:$BOT_TOKEN" | sha256sum | cut -d' ' -f1)
