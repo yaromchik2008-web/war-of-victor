@@ -5,7 +5,7 @@ const WOV = (window.WOV = window.WOV || {});
 
 // Put your bot username and Mini App short name here after creating them in @BotFather.
 // They are used to build invite links: https://t.me/<BOT_USERNAME>/<APP_NAME>?startapp=ref_<code>
-WOV.CONFIG = { BOT_USERNAME: "", APP_NAME: "play" };
+WOV.CONFIG = { BOT_USERNAME: "warofvictor_bot", APP_NAME: "play" };
 
 WOV.ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII"];
 WOV.KIND_NAME = { tank: "Танки", plane: "Літаки", ship: "Кораблі" };
