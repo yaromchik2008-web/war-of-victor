@@ -325,3 +325,20 @@ input { font: inherit; }
 .shopitem.star .star-ico { height: 46px; display: grid; place-items: center; }
 .shopitem.star.best { border-color: var(--accent); }
 .shopitem.star .tag { position: absolute; top: 6px; right: 6px; background: var(--accent); color: #1d1a12; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
+
+/* medals, mastery, login calendar */
+.mastery { display: inline-grid; place-items: center; min-width: 20px; height: 18px; padding: 0 4px; border-radius: 5px; background: var(--c); color: #1d1a12; font-size: 11px; font-weight: 900; vertical-align: middle; }
+.medals-row { display: flex; gap: 6px; overflow-x: auto; margin: 10px 0 6px; padding-bottom: 2px; }
+.medal { flex: none; width: 86px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; text-align: center; animation: pop .4s ease-out both; }
+.medal span { font-size: 24px; display: block; } .medal b { display: block; font-size: 11px; line-height: 1.2; margin-top: 2px; } .medal small { color: var(--accent2); font-size: 11px; font-weight: 700; }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.hall-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.hall { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 6px; text-align: center; }
+.hall span { font-size: 24px; display: block; } .hall b { display: block; font-size: 11px; margin-top: 2px; } .hall small { display: block; color: var(--muted); font-size: 10px; line-height: 1.25; margin-top: 2px; }
+.hall i { position: absolute; top: 5px; right: 6px; font-style: normal; font-size: 11px; font-weight: 800; color: var(--accent2); }
+.hall.none span { filter: grayscale(1); opacity: .35; } .hall.none b { color: var(--muted); }
+.mlist { display: flex; flex-wrap: wrap; gap: 6px; } .mchip { display: inline-flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; font-size: 12px; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cday { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 2px; text-align: center; min-width: 0; }
+.cday small { display: block; color: var(--muted); font-size: 9px; } .cday b { display: block; font-size: 11px; margin-top: 3px; word-break: break-word; }
+.cday.now { border-color: var(--accent); background: rgba(224,172,69,.14); } .cday.got { opacity: .55; } .cday.got b::after { content: " ✓"; color: var(--good); }

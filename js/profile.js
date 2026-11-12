@@ -33,6 +33,7 @@ function fresh() {
     ammo: Object.assign({}, WOV.START_STOCK), ammoSel: { tank: "ap", plane: "mg", ship: "ap" }, giftAt: 0, dealDay: "",
     rp: {}, resTarget: { tank: null, plane: null, ship: null }, vmods: {}, vbattles: {}, crew: { tank: {}, plane: {}, ship: {} },
     daily: { day: "", list: [] }, pass: { xp: 0, claimed: [] },
+    medals: {}, mastery: {}, login: { day: "", streak: 0, claimed: "" }, miniPos: null, miniBig: false,
   };
 }
 WOV.profile = fresh();
@@ -46,7 +47,7 @@ function sanitize(p) {
   out.stats = Object.assign(fresh().stats, out.stats || {});
   out.ammo = Object.assign(fresh().ammo, out.ammo || {});
   out.ammoSel = Object.assign(fresh().ammoSel, out.ammoSel || {});
-  for (const k of ["rp", "resTarget", "vmods", "vbattles", "crew", "daily", "pass"]) out[k] = Object.assign(fresh()[k], out[k] || {});
+  for (const k of ["rp", "resTarget", "vmods", "vbattles", "crew", "daily", "pass", "medals", "mastery", "login"]) out[k] = Object.assign(fresh()[k], out[k] || {});
   for (const k of ["tank", "plane", "ship"]) out.crew[k] = out.crew[k] || {};
   if (!Array.isArray(out.pass.claimed)) out.pass.claimed = [];
   if (!Array.isArray(out.daily.list)) out.daily.list = [];

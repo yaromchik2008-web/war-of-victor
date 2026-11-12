@@ -187,8 +187,39 @@ WOV.STOCK = {
   inc: { name: "Запальні кулі", kind: "plane", packs: [{ n: 300, coins: 1000 }, { n: 1000, coins: 2800 }] },
   heavy: { name: "Надважкі снаряди", kind: "ship", packs: [{ n: 15, coins: 1400 }, { n: 45, coins: 3500 }] },
   repair: { name: "Ремкомплект", kind: null, packs: [{ n: 3, coins: 900 }, { n: 10, coins: 2500 }] },
+  strike: { name: "Артудар", kind: null, desc: "Раз за бій викликає залп артилерії по найближчому ворогу: 5 вибухів за 2 секунди. Літаків не зачіпає.", packs: [{ n: 3, coins: 1500 }, { n: 10, coins: 4200 }] },
 };
-WOV.START_STOCK = { apcr: 10, inc: 200, heavy: 6, repair: 2 };
+WOV.START_STOCK = { apcr: 10, inc: 200, heavy: 6, repair: 2, strike: 2 };
+
+// medals for a single battle: test(s) gets the battle summary
+WOV.MEDALS = [
+  { id: "blood", ico: "🩸", name: "Перша кров", desc: "Перше знищення в бою", coins: 150 },
+  { id: "warrior", ico: "⚔️", name: "Воїн", desc: "Знищ 3 ворогів за бій", coins: 300 },
+  { id: "ace", ico: "🏅", name: "Ас", desc: "Знищ 5 ворогів за бій", coins: 800 },
+  { id: "sniper", ico: "🎯", name: "Снайпер", desc: "Знищ ворога з відстані понад 150 м", coins: 250 },
+  { id: "aa", ico: "✈️", name: "Гроза неба", desc: "Збий 2 літаки за бій", coins: 350 },
+  { id: "wall", ico: "🛡", name: "Залізна стіна", desc: "Витримай шкоди більше за свою міцність і вцілій", coins: 400 },
+  { id: "hair", ico: "😮‍💨", name: "На волосинці", desc: "Перемога, коли в тебе менше 15% міцності", coins: 300 },
+  { id: "courier", ico: "📦", name: "Інтендант", desc: "Підбери 2 ящики з припасами", coins: 200 },
+  { id: "artillery", ico: "💥", name: "Бог війни", desc: "Знищ ворога артударом", coins: 350 },
+  { id: "top", ico: "👑", name: "Герой бою", desc: "Найкращий результат серед усіх у бою", coins: 500 },
+  { id: "capture", ico: "🚩", name: "Загарбник", desc: "Захопи 2 точки за бій", coins: 300 },
+  { id: "lone", ico: "🐺", name: "Вовк-одинак", desc: "Перемога, коли з команди вцілів тільки ти", coins: 600 },
+];
+// vehicle mastery for one battle score (damage relative to own health, kills, win, survival)
+WOV.MASTERY = [
+  { lvl: 1, name: "III ступінь", short: "III", score: 80, crystals: 5, col: "#9fb3a0" },
+  { lvl: 2, name: "II ступінь", short: "II", score: 140, crystals: 10, col: "#7fbf6b" },
+  { lvl: 3, name: "I ступінь", short: "I", score: 220, crystals: 20, col: "#6fc3f0" },
+  { lvl: 4, name: "Майстер", short: "М", score: 320, crystals: 40, col: "#f3cf7a" },
+];
+// 7-day login calendar
+WOV.LOGIN_REWARDS = [
+  { coins: 500 }, { stock: "repair", n: 3 }, { coins: 1200 }, { crystals: 10 }, { stock: "strike", n: 3 }, { coins: 2500 }, { crystals: 40, box: "gold" },
+];
+WOV.WEATHER = [
+  { id: "day", name: "Ясний день", w: 4 }, { id: "evening", name: "Вечір", w: 2 }, { id: "rain", name: "Злива", w: 2 }, { id: "fog", name: "Туман", w: 1 }, { id: "night", name: "Ніч", w: 1 },
+];
 WOV.DAILY_GIFT = { hours: 20, coins: [300, 900], crystalsChance: 0.35, crystals: [3, 10] };
 WOV.FRIEND_BONUS = 1500; WOV.REF_BONUS = 3000; WOV.MAX_FRIEND_REWARDS = 10;
 

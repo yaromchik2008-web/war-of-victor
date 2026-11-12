@@ -138,8 +138,61 @@ WOV.recordBattle = function (s) {
   p.pass.xp += Math.round(20 + s.xp / 12);
   p.vbattles[v.id] = (p.vbattles[v.id] || 0) + 1;
   const researched = WOV.addResearch(v.kind, s.xp);
-  return { finished, passUp: WOV.passLevel() > passBefore ? WOV.passLevel() : 0, researched, rp: s.xp };
+  const medals = medalsFor(s);
+  for (const md of medals) { p.medals[md.id] = (p.medals[md.id] || 0) + 1; p.coins += md.coins; }
+  const mastery = masteryFor(s);
+  return { finished, passUp: WOV.passLevel() > passBefore ? WOV.passLevel() : 0, researched, rp: s.xp, medals, mastery };
 };
+// ---------- medals and vehicle mastery (called from WOV.recordBattle) ----------
+function medalsFor(s) {
+  const m = s.medalStats || {}, out = [];
+  const has = id => out.push(WOV.MEDALS.find(x => x.id === id));
+  if (m.firstBlood) has("blood");
+  if (s.kills >= 5) has("ace"); else if (s.kills >= 3) has("warrior");
+  if (m.longKill) has("sniper");
+  if (m.planes >= 2) has("aa");
+  if (s.survived && m.taken > m.maxHp) has("wall");
+  if (s.result === "win" && s.survived && m.hpLeft < 0.15) has("hair");
+  if (m.crates >= 2) has("courier");
+  if (m.strikeKills) has("artillery");
+  if (m.top && (s.kills || s.dmg > 0)) has("top");
+  if (s.caps >= 2) has("capture");
+  if (s.result === "win" && s.survived && m.lastAlly) has("lone");
+  return out.filter(Boolean);
+}
+WOV.masteryOf = id => WOV.MASTERY[(P().mastery[id] || 0) - 1] || null;
+function masteryFor(s) {
+  const m = s.medalStats || {}; if (!m.maxHp) return null;
+  const score = (s.dmg / m.maxHp) * 100 + s.kills * 60 + (s.result === "win" ? 40 : 0) + (s.survived ? 20 : 0);
+  let got = null; for (const q of WOV.MASTERY) if (score >= q.score) got = q;
+  if (!got) return null;
+  const p = P(), before = p.mastery[s.vehicleId] || 0;
+  if (got.lvl > before) { p.mastery[s.vehicleId] = got.lvl; p.crystals += got.crystals; return { level: got, fresh: true, score: Math.round(score) }; }
+  return { level: got, fresh: false, score: Math.round(score) };
+}
+
+// ---------- 7-day login calendar ----------
+const dayNum = d => Math.floor((d.getTime() - d.getTimezoneOffset() * 60e3) / 864e5);
+WOV.loginState = function () {
+  const L = P().login, today = String(dayNum(new Date()));
+  if (L.day !== today) {
+    const yesterday = String(dayNum(new Date()) - 1);
+    L.streak = L.day === yesterday && L.claimed === L.day ? (L.streak % 7) + 1 : 1;
+    L.day = today;
+  }
+  return { day: L.streak, claimed: L.claimed === today };
+};
+WOV.claimLogin = function () {
+  const st = WOV.loginState(); if (st.claimed) return null;
+  const p = P(), r = WOV.LOGIN_REWARDS[st.day - 1], parts = [];
+  if (r.coins) { p.coins += r.coins; parts.push("+" + r.coins + " монет"); }
+  if (r.crystals) { p.crystals += r.crystals; parts.push("+" + r.crystals + " кристалів"); }
+  if (r.stock) { p.ammo[r.stock] = (p.ammo[r.stock] || 0) + r.n; parts.push("+" + r.n + " · " + WOV.STOCK[r.stock].name); }
+  if (r.box) { const box = WOV.BOXES.find(b => b.id === r.box); if (box) { WOV.openBox(box); parts.push(box.name + " бокс"); } }
+  p.login.claimed = p.login.day; WOV.save(); WOV.emit("wallet");
+  return parts.join(", ");
+};
+
 WOV.claimTask = function (i) {
   const p = P(), t = p.daily.list[i]; if (!t || t.claimed || t.got < t.n) return false;
   t.claimed = true; p.coins += t.reward; p.pass.xp += 150; WOV.save(); WOV.emit("wallet"); return true;

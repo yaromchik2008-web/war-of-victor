@@ -100,6 +100,7 @@ function renderHangar() {
   segment($("#hangarCls"), p.cls, k => { p.cls = k; WOV.save(); renderHangar(); });
   $("#hTier").textContent = WOV.ROMAN[v.tier]; $("#hTier").className = "tier" + (v.prem ? " prem" : "");
   $("#hName").textContent = v.name; $("#hMeta").textContent = v.nation + " · " + roleOf(v) + (v.prem ? " · преміум" : "");
+  const mq = WOV.masteryOf(v.id); if (mq) $("#hName").insertAdjacentHTML("beforeend", ' <span class="mastery" style="--c:' + mq.col + '" title="' + mq.name + '">' + mq.short + "</span>");
   renderHangarStats();
   const owned = WOV.VEHICLES.filter(o => o.kind === p.cls && WOV.owns(o.id)).sort((a, b) => a.tier - b.tier);
   const car = $("#hOwned"); car.innerHTML = "";
@@ -239,7 +240,7 @@ function boxArt(b) { return '<div class="boxart" style="--c:' + b.color + ";--r:
 let shopTab = "boxes";
 const SHOP_TABS = [["stars", "⭐ Зірки"], ["boxes", "Бокси"], ["ammo", "Снаряди"], ["vehicles", "Техніка"], ["camo", "Камуфляж"], ["other", "Інше"]];
 const shellIco = (a, txt) => '<div class="shell-ico" style="--c:' + a.col + '">' + (txt || a.short) + "</div>";
-const STOCK_ICO = { apcr: { col: "#9fd8ff", short: "ПК" }, inc: { col: "#ff7a3a", short: "ЗАП" }, heavy: { col: "#c9a8ff", short: "НВ" }, repair: { col: "#7fbf6b", short: "РЕМ" } };
+const STOCK_ICO = { apcr: { col: "#9fd8ff", short: "ПК" }, inc: { col: "#ff7a3a", short: "ЗАП" }, heavy: { col: "#c9a8ff", short: "НВ" }, repair: { col: "#7fbf6b", short: "РЕМ" }, strike: { col: "#ff5a32", short: "АРТ" } };
 function noMoney(cur) { WOV.haptic("error"); toast(cur === "coins" ? "Не вистачає монет" : "Не вистачає кристалів"); }
 const todayKey = () => { const d = new Date(); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); };
 // one discounted item per day (same for the whole day), chosen from things the player does not own yet
@@ -310,11 +311,11 @@ function renderShop() {
     }
     body.appendChild(el("p", "note", "Монети заробляються в боях: за знищену техніку, шкоду і перемогу. Кристали випадають з боксів."));
   } else if (shopTab === "ammo") {
-    body.appendChild(el("p", "note", "Звичайні снаряди безлімітні. Спецснаряди витрачаються в бою, перемикай їх кнопками біля «ВОГОНЬ» (на ПК клавіші 1, 2, 3). Ремкомплект (зелений хрестик або R) раз за бій лагодить модулі, гасить пожежу і додає 20% міцності."));
+    body.appendChild(el("p", "note", "Звичайні снаряди безлімітні. Спецснаряди витрачаються в бою, перемикай їх кнопками біля «ВОГОНЬ» (на ПК клавіші 1, 2, 3). Ремкомплект (зелений хрестик або R) раз за бій лагодить модулі, гасить пожежу і додає 20% міцності. Артудар (приціл або F) раз за бій накриває найближчого ворога залпом."));
     for (const k of Object.keys(WOV.STOCK)) {
       const st = WOV.STOCK[k], ico = STOCK_ICO[k], ammo = st.kind ? WOV.AMMO[st.kind].find(a => a.stock === k) : null;
       const card = el("div", "stock", shellIco(ico) + "<div><b>" + st.name + "</b>" + (st.kind ? ' <small style="color:var(--muted)">· ' + WOV.KIND_NAME[st.kind].toLowerCase() + "</small>" : "") +
-        '<div class="have">У запасі: ' + fmt(p.ammo[k] || 0) + "</div><p>" + (ammo ? ammo.desc : "Раз за бій лагодить модулі, гасить пожежу і повертає 20% міцності.") + '</p></div><div class="packs"></div>');
+        '<div class="have">У запасі: ' + fmt(p.ammo[k] || 0) + "</div><p>" + (ammo ? ammo.desc : st.desc || "Раз за бій лагодить модулі, гасить пожежу і повертає 20% міцності.") + '</p></div><div class="packs"></div>');
       st.packs.forEach(pk => {
         const b = el("button", "", "<span>×" + fmt(pk.n) + "</span>" + priceHtml("coins", pk.coins));
         b.onclick = () => { if (!WOV.spend("coins", pk.coins)) return noMoney("coins"); p.ammo[k] = (p.ammo[k] || 0) + pk.n; WOV.save(); WOV.haptic("success"); if (A) A.sfx("coin"); toast("+" + fmt(pk.n) + " · " + st.name); renderShop(); };
@@ -505,11 +506,37 @@ $("#hCrew").onclick = crewSheet;
 const passIcon = r => r.type === "coins" ? "🪙" : r.type === "crystals" ? "💎" : r.type === "box" ? "📦" : r.type === "camo" ? "🎨" : r.type === "vehicle" ? "⭐" : "💥";
 const passText = r => r.type === "coins" || r.type === "crystals" ? fmt(r.amount) : r.type === "box" ? (WOV.BOXES.find(b => b.id === r.id) || {}).name : r.type === "camo" ? "камуфляж" : r.type === "vehicle" ? WOV.byId[r.id].name : "×" + r.amount;
 function updateTaskDot() {
-  const p = WOV.profile, ready = WOV.dailyTasks().some(t => !t.claimed && t.got >= t.n), lvl = WOV.passLevel();
+  const p = WOV.profile, ready = WOV.dailyTasks().some(t => !t.claimed && t.got >= t.n) || !WOV.loginState().claimed, lvl = WOV.passLevel();
   let pass = false; for (let i = 1; i <= lvl; i++) if (!p.pass.claimed.includes(i)) { pass = true; break; }
   $("#tasksDot").classList.toggle("hidden", !(ready || pass));
 }
+function loginRewardText(r) { return r.coins ? fmt(r.coins) + " 🪙" : r.crystals ? r.crystals + " 💎" + (r.box ? " + бокс" : "") : "×" + r.n + " " + (r.stock === "strike" ? "💥" : "🔧"); }
+function renderLogin(box) {
+  box = box || $("#loginCal");
+  const st = WOV.loginState(); box.innerHTML = "";
+  const grid = el("div", "cal");
+  WOV.LOGIN_REWARDS.forEach((r, i) => {
+    const d = i + 1, cls = d < st.day || (d === st.day && st.claimed) ? " got" : d === st.day ? " now" : "";
+    grid.appendChild(el("div", "cday" + cls, "<small>День " + d + "</small><b>" + loginRewardText(r) + "</b>"));
+  });
+  box.appendChild(grid);
+  const btn = el("button", st.claimed ? "btn-sec" : "btn-main", st.claimed ? "Нагороду отримано, приходь завтра" : "Забрати нагороду дня " + st.day);
+  btn.disabled = st.claimed; btn.style.cssText = "width:100%;margin-top:10px";
+  btn.onclick = () => { const t = WOV.claimLogin(); if (t) { WOV.haptic("success"); if (A) A.sfx("reward"); toast("День " + st.day + ": " + t, 3000); if (box.id === "loginSheet") closeSheet(); else renderTasks(); updateTaskDot(); } };
+  box.appendChild(btn);
+}
+function renderMedals() {
+  const p = WOV.profile, box = $("#medalHall"); box.innerHTML = "";
+  for (const m of WOV.MEDALS) {
+    const n = p.medals[m.id] || 0;
+    const c = el("div", "hall" + (n ? "" : " none"), "<span>" + m.ico + "</span><b>" + m.name + "</b><small>" + m.desc + "</small>" + (n ? '<i>×' + n + "</i>" : ""));
+    box.appendChild(c);
+  }
+  const owned = WOV.VEHICLES.filter(v => p.mastery[v.id]);
+  $("#masteryList").innerHTML = owned.length ? owned.map(v => { const q = WOV.masteryOf(v.id); return '<span class="mchip"><span class="mastery" style="--c:' + q.col + '">' + q.short + "</span>" + v.name + "</span>"; }).join("") : '<div class="empty">Майстерність дається за сильний бій на конкретній машині: III, II, I ступінь і Майстер.</div>';
+}
 function renderTasks() {
+  renderLogin(); renderMedals();
   const p = WOV.profile, list = WOV.dailyTasks(), left = WOV.taskTimeLeft();
   $("#taskTimer").textContent = "· нові через " + Math.floor(left / 3600e3) + " год " + Math.floor((left % 3600e3) / 60e3) + " хв";
   const dl = $("#dailyList"); dl.innerHTML = "";
@@ -594,7 +621,10 @@ function progressHtml(s) {
   for (const t of g.finished || []) out.push("📋 Завдання виконано, забери нагороду у вкладці «Завдання»");
   if (g.passUp) out.push("🎖 Бойовий пропуск: рівень <b>" + g.passUp + "</b>");
   if (s.caps) out.push("🚩 Захоплено точок: <b>" + s.caps + "</b>");
-  return out.map(x => '<div class="res-line">' + x + "</div>").join("");
+  if (g.mastery) out.push("🎖 <span>Майстерність " + WOV.byId[s.vehicleId].name + ": <b>" + g.mastery.level.name + "</b>" + (g.mastery.fresh ? ", новий рівень! +" + g.mastery.level.crystals + " кристалів" : "") + "</span>");
+  let medals = "";
+  if (g.medals && g.medals.length) medals = '<div class="medals-row">' + g.medals.map(m => '<div class="medal"><span>' + m.ico + "</span><b>" + m.name + "</b><small>+" + fmt(m.coins) + "</small></div>").join("") + "</div>";
+  return medals + out.map(x => '<div class="res-line">' + x + "</div>").join("");
 }
 const escapeHtml = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -627,5 +657,9 @@ WOV.load(() => {
   if (WOV.pendingToast) setTimeout(() => toast(WOV.pendingToast, 3500), 600);
   // purchases paid while the game was closed
   if (WOV.Net) WOV.Net.hello().then(msg => { if (msg) toast("Покупка зарахована: " + msg, 4000); });
+  if (!WOV.loginState().claimed) setTimeout(() => {
+    const st = WOV.loginState(); if (st.claimed || WOV.Battle.active()) return;
+    openSheet('<h2>Щоденний вхід</h2><div class="sub">Заходь щодня: що довша серія, то краща нагорода. Пропустиш день, і серія почнеться знову.</div><div id="loginSheet"></div>', sh => renderLogin(sh.querySelector("#loginSheet")));
+  }, 1200);
 });
 })();

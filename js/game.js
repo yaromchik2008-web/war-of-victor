@@ -31,12 +31,36 @@ window.addEventListener("keydown", e => {
   const n = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];
   if (n !== undefined && AMMO[B.player.kind][n]) setAmmo(B.player, AMMO[B.player.kind][n].id);
   if (e.code === "KeyR") useRepair(B.player);
+  if (e.code === "KeyF") useStrike(B.player);
 });
 window.addEventListener("keyup", e => { keys[e.code] = false; });
 const mouse = { x: 0, y: 0, down: false, active: false };
-cv.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; });
-cv.addEventListener("mousedown", e => { mouse.active = true; if (B && pressButton(e.clientX, e.clientY, null)) return; mouse.down = true; });
-window.addEventListener("mouseup", () => { mouse.down = false; });
+// the minimap can be dragged anywhere; a tap without moving toggles its size
+const miniDrag = { id: null, ox: 0, oy: 0, sx: 0, sy: 0, moved: false };
+function hudTop() { const tg = WOV.tg; return 10 + ((tg && tg.safeAreaInset && tg.safeAreaInset.top) || 0) + ((tg && tg.contentSafeAreaInset && tg.contentSafeAreaInset.top) || 0); }
+function miniRect() {
+  const prof = WOV.profile, ms = prof.miniBig ? Math.min(210, W * 0.52, H * 0.4) : Math.min(110, W * 0.28);
+  let x = W - ms - 10, y = hudTop() + 42;
+  if (prof.miniPos) { x = clamp(prof.miniPos.x * W, 4, W - ms - 4); y = clamp(prof.miniPos.y * H, 4, H - ms - 4); }
+  return { x, y, s: ms };
+}
+function miniStart(x, y, id) {
+  if (!B) return false;
+  const r = miniRect(); if (x < r.x - 8 || x > r.x + r.s + 8 || y < r.y - 8 || y > r.y + r.s + 8) return false;
+  Object.assign(miniDrag, { id, ox: r.x - x, oy: r.y - y, sx: x, sy: y, moved: false }); return true;
+}
+function miniMove(x, y) {
+  if (Math.hypot(x - miniDrag.sx, y - miniDrag.sy) > 8) miniDrag.moved = true;
+  if (miniDrag.moved) WOV.profile.miniPos = { x: (x + miniDrag.ox) / W, y: (y + miniDrag.oy) / H };
+}
+function miniEnd() {
+  const prof = WOV.profile;
+  if (!miniDrag.moved) { const r = miniRect(), cx = r.x + r.s / 2, cy = r.y + r.s / 2; prof.miniBig = !prof.miniBig; const n = miniRect(); if (prof.miniPos) prof.miniPos = { x: (cx - n.s / 2) / W, y: (cy - n.s / 2) / H }; WOV.haptic("select"); }
+  miniDrag.id = null; WOV.save();
+}
+cv.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; if (miniDrag.id === "m") miniMove(e.clientX, e.clientY); });
+cv.addEventListener("mousedown", e => { mouse.active = true; if (B && pressButton(e.clientX, e.clientY, null)) return; if (miniStart(e.clientX, e.clientY, "m")) return; mouse.down = true; });
+window.addEventListener("mouseup", () => { mouse.down = false; if (miniDrag.id === "m") miniEnd(); });
 const sticks = { L: { id: null, ox: 0, oy: 0, dx: 0, dy: 0 }, R: { id: null, ox: 0, oy: 0, dx: 0, dy: 0 } };
 const STICK_R = 60;
 const fireBtn = { id: null };
@@ -45,18 +69,20 @@ cv.addEventListener("touchstart", e => {
   e.preventDefault(); usingTouch = true; mouse.active = false;
   for (const t of e.changedTouches) {
     if (B && pressButton(t.clientX, t.clientY, t.identifier)) continue;
+    if (miniDrag.id === null && miniStart(t.clientX, t.clientY, t.identifier)) continue;
     const s = t.clientX < W / 2 ? sticks.L : sticks.R; if (s.id !== null) continue; s.id = t.identifier; s.ox = t.clientX; s.oy = t.clientY; s.dx = s.dy = 0;
   }
 }, { passive: false });
 cv.addEventListener("touchmove", e => {
   e.preventDefault();
+  for (const t of e.changedTouches) if (miniDrag.id === t.identifier) miniMove(t.clientX, t.clientY);
   for (const t of e.changedTouches) for (const s of [sticks.L, sticks.R]) if (s.id === t.identifier) {
     let dx = t.clientX - s.ox, dy = t.clientY - s.oy; const d = Math.hypot(dx, dy);
     if (d > STICK_R) { dx *= STICK_R / d; dy *= STICK_R / d; }
     s.dx = dx / STICK_R; s.dy = dy / STICK_R;
   }
 }, { passive: false });
-const endTouch = e => { e.preventDefault(); for (const t of e.changedTouches) { if (fireBtn.id === t.identifier) fireBtn.id = null; for (const s of [sticks.L, sticks.R]) if (s.id === t.identifier) { s.id = null; s.dx = s.dy = 0; } } };
+const endTouch = e => { e.preventDefault(); for (const t of e.changedTouches) { if (miniDrag.id === t.identifier) miniEnd(); if (fireBtn.id === t.identifier) fireBtn.id = null; for (const s of [sticks.L, sticks.R]) if (s.id === t.identifier) { s.id = null; s.dx = s.dy = 0; } } };
 
 // on-screen buttons: fire (touch), ammo types and repair kit, arranged around the bottom-right corner
 function safeBottom() { const tg = WOV.tg; return (tg && tg.safeAreaInset && tg.safeAreaInset.bottom) || 0; }
@@ -65,6 +91,7 @@ function controls() {
   if (usingTouch) list.push({ k: "fire", x: fx, y: fy, r: 44 });
   AMMO[p.kind].forEach((a, i) => { const ang = Math.PI + i * 0.55; list.push({ k: "ammo", a, i, x: fx + Math.cos(ang) * R, y: fy + Math.sin(ang) * R, r: 23 }); });
   const ang = Math.PI + 3 * 0.55; list.push({ k: "repair", x: fx + Math.cos(ang) * R, y: fy + Math.sin(ang) * R, r: 21 });
+  const a2 = Math.PI + 4 * 0.55; list.push({ k: "strike", x: Math.min(W - 24, fx + Math.cos(a2) * R), y: fy + Math.sin(a2) * R, r: 21 });
   return list;
 }
 function pressButton(x, y, touchId) {
@@ -73,6 +100,7 @@ function pressButton(x, y, touchId) {
     if ((x - b.x) ** 2 + (y - b.y) ** 2 > (b.r + 8) ** 2) continue;
     if (b.k === "fire") { if (touchId !== null) fireBtn.id = touchId; }
     else if (b.k === "ammo") setAmmo(p, b.a.id);
+    else if (b.k === "strike") useStrike(p);
     else useRepair(p);
     return true;
   }
@@ -91,7 +119,7 @@ function makeUnit(v, team, pos, name, isPlayer, camo) {
   const a = team === 0 ? 0 : Math.PI;
   return { v, kind: v.kind, team, x: pos.x, y: pos.y, r: v.r, angle: a, tAngle: a, vel: v.kind === "plane" ? v.speed * 0.8 : 0,
     hp: v.hp, maxHp: v.hp, cd: rnd(0.5, 1.5), aaCd: 0, flash: 0, track: 0, bank: 0, name, isPlayer, camo,
-    kills: 0, dmgDone: 0, mods: {}, fire: 0, ammo: AMMO[v.kind][0].id, limited: {}, repairUsed: false, stall: 0, wet: false, trackAcc: 0, S: null, ai: { wx: pos.x, wy: pos.y, retarget: 0, stuck: 0, pass: 0, target: null, think: 0 } };
+    kills: 0, dmgDone: 0, taken: 0, crates: 0, buff: {}, mods: {}, fire: 0, ammo: AMMO[v.kind][0].id, limited: {}, repairUsed: false, stall: 0, wet: false, trackAcc: 0, S: null, ai: { wx: pos.x, wy: pos.y, retarget: 0, stuck: 0, pass: 0, target: null, think: 0 } };
 }
 
 // fair matchmaking: mostly the player's own tier, sometimes one lower, rarely one higher; both teams get the same tiers
@@ -176,6 +204,14 @@ function start(modeId, onEnd, match) {
   if (WOV.Audio) WOV.Audio.music("battle");
   perf.n = 0; perf.acc = 0;
   B.alerts = [];
+  B.ms = { firstBlood: 0, longKill: 0, planes: 0, strikeKills: 0 };
+  const wr = match ? seeded(match.seed ^ 0x1234567) : Math.random, wsum = WOV.WEATHER.reduce((a, w) => a + w.w, 0);
+  let wroll = wr() * wsum; B.weather = WOV.WEATHER.find(w => (wroll -= w.w) < 0) || WOV.WEATHER[0];
+  B.dim = B.weather.id === "night" || B.weather.id === "fog";
+  if (B.weather.id !== "day") B.banner.sub += " · " + B.weather.name.toLowerCase();
+  B.rain = B.weather.id === "rain" ? Array.from({ length: 110 }, () => ({ x: Math.random() * W, y: Math.random() * H, l: rnd(10, 22), v: rnd(700, 1000) })) : null;
+  B.crates = []; B.crateNext = 18; B.crateN = 0; B.crateR = seeded(((match ? match.seed : Math.random() * 1e9) ^ 0x2545f491) >>> 0);
+  B.strikes = [];
   cv.style.display = "block";
   document.getElementById("battleUi").classList.remove("hidden");
   last = performance.now();
@@ -222,7 +258,7 @@ function blast(s, except) {
     if (t.dead || t === except || t.team === s.team || t.kind === "plane") continue;
     const d = Math.max(0, Math.hypot(t.x - s.x, t.y - s.y) - t.r); if (d > R) continue;
     const dmg = Math.min(t.hp, s.dmg * 0.4 * (1 - d / R)); if (dmg < 1) continue;
-    if (t.remote) netHit(t, dmg, s, Math.atan2(s.y - t.y, s.x - t.x)); else t.hp -= dmg;
+    if (t.remote) netHit(t, dmg, s, Math.atan2(s.y - t.y, s.x - t.x)); else { t.hp -= dmg; t.taken += dmg; }
     s.owner.dmgDone += dmg; B.lastDmg = B.time; s.hitT = t;
     if (s.owner.isPlayer || t.isPlayer) floatText(t.x, t.y - t.r - 10, "-" + Math.round(dmg), t.isPlayer ? "#ff8a70" : "#ffc07a");
     if (t.hp <= 0.5 && !t.remote) destroy(t, s.owner);
@@ -275,12 +311,14 @@ function netPacket(pk) {
       u.flash = e.f & 2 ? 0.04 : 0.09;
       if (e.f & 2) SFX("mg", { x: e.x, y: e.y, vol: 0.45 }); else SFX("cannon", { x: e.x, y: e.y, k: 0.4, vol: 0.8 });
     } else if (e.k === "h" && !u.remote && !u.dead) {
-      const d = Math.min(u.hp, e.d); u.hp -= d; b.lastDmg = b.time; if (by) by.dmgDone += d;
+      const d = Math.min(u.hp, e.d); u.hp -= d; u.taken += d; b.lastDmg = b.time; if (by) by.dmgDone += d;
       const fake = { small: !!e.sm, mod: e.m || 0.0001, fireK: e.fk || 1, owner: by || u };
       if (u.hp > 0.5) damageModule(u, fake, e.i || 0);
       if (u.isPlayer) { floatText(u.x, u.y - u.r - 10, "-" + Math.round(d), "#ff8a70"); if (!e.sm) { WOV.haptic("heavy"); b.cam.shake = Math.max(b.cam.shake, 8); SFX("hit", { x: u.x, y: u.y }); } }
       if (u.hp <= 0.5) destroy(u, by);
     } else if (e.k === "k") destroy(u, by, true);
+    else if (e.k === "c") { const c = b.crates.find(x => x.id === e.id); if (c) takeCrate(u, c, true); }
+    else if (e.k === "as") b.strikes.push({ x: e.x, y: e.y, t: 2.2, e: 0, owner: u, booms: [0, 0.15, 0.3, 0.5, 0.7], ghost: true });
     else if (e.k === "end" && !b.over) finish(e.w === b.net.myAbs ? "win" : "lose", true);
   }
 }
@@ -292,6 +330,118 @@ function netMove(u, dt) {
   else { const k = Math.min(1, dt * 9); u.x += (tx - u.x) * k; u.y += (ty - u.y) * k; }
   u.angle = approachAng(u.angle, t.a, dt * 9); u.tAngle = approachAng(u.tAngle, t.ta, dt * 12); u.vel = t.vel;
   if (u.kind === "tank") u.track += u.vel * dt;
+}
+
+// ---------- supply crates: dropped every ~20 s, any vehicle that drives over one picks it up ----------
+const CRATE = { repair: { col: "#7fbf6b", name: "Ремонт +30%" }, reload: { col: "#f3cf7a", name: "Швидке заряджання 12 с" }, speed: { col: "#6fc3f0", name: "Форсаж 12 с" } };
+function spawnCrate() {
+  const R = B.crateR, kinds = Object.keys(CRATE), kind = kinds[Math.floor(R() * kinds.length)], S = B.map.size;
+  for (let i = 0; i < 80; i++) {
+    const x = S * (0.15 + R() * 0.7), y = S * (0.08 + R() * 0.84), water = B.map.isWater(x, y);
+    if (B.map.pointInWalls(x, y)) continue;
+    B.crates.push({ id: B.crateN++, x, y, kind, water, life: 45, drop: 1 });
+    if (B.player && !B.player.dead) floatText(B.player.x, B.player.y - 40, "📦 Скинуто припаси", "#cfe3c0");
+    return;
+  }
+}
+function takeCrate(u, c, fromNet) {
+  B.crates = B.crates.filter(x => x !== c);
+  if (B.net && !fromNet) B.net.link.event({ k: "c", n: u.nid, id: c.id });
+  if (fromNet) return;
+  if (c.kind === "repair") { u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.3); u.mods = {}; u.fire = 0; }
+  else u.buff[c.kind] = 12;
+  u.crates++;
+  spark(c.x, c.y, CRATE[c.kind].col, 14, 140);
+  if (u.isPlayer) { alert("📦 " + CRATE[c.kind].name, "good"); WOV.haptic("success"); SFX("click"); }
+}
+function updateCrates(dt) {
+  const b = B, el = b.mode.time - b.time;
+  if (!b.over && el >= b.crateNext) { b.crateNext += 22; spawnCrate(); }
+  for (const c of b.crates.slice()) {
+    c.life -= dt; c.drop = Math.max(0, c.drop - dt * 1.5);
+    if (c.life <= 0) { b.crates = b.crates.filter(x => x !== c); continue; }
+    if (c.drop > 0) continue;
+    for (const u of b.units) {
+      if (u.dead || u.remote) continue;
+      if (u.kind !== "plane" && c.water !== (u.kind === "ship")) continue;
+      if ((u.x - c.x) ** 2 + (u.y - c.y) ** 2 < (u.r + 16) ** 2) { takeCrate(u, c); break; }
+    }
+  }
+}
+function drawCrate(c) {
+  const bob = c.water ? Math.sin(performance.now() / 400 + c.id) * 2 : 0, y = c.y + bob - c.drop * 60, col = CRATE[c.kind].col;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 300 + c.id);
+  ctx.globalAlpha = 0.35 + pulse * 0.3; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y, 18 + pulse * 4, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
+  if (c.drop > 0) { ctx.strokeStyle = "rgba(240,240,230,.7)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(c.x - 7, y - 4); ctx.lineTo(c.x - 12, y - 22); ctx.moveTo(c.x + 7, y - 4); ctx.lineTo(c.x + 12, y - 22); ctx.stroke(); ctx.fillStyle = "#e8e4d8"; ctx.beginPath(); ctx.arc(c.x, y - 22, 14, Math.PI, 0); ctx.fill(); }
+  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(c.x - 8, c.y - 5, 18, 14);
+  ctx.fillStyle = c.water ? "#8a6a3c" : "#9a7444"; ctx.fillRect(c.x - 10, y - 9, 20, 18);
+  ctx.strokeStyle = "#5e4524"; ctx.lineWidth = 2; ctx.strokeRect(c.x - 10, y - 9, 20, 18); ctx.beginPath(); ctx.moveTo(c.x - 10, y - 9); ctx.lineTo(c.x + 10, y + 9); ctx.stroke();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(c.x, y, 5, 0, TAU); ctx.fill();
+}
+
+// ---------- artillery strike: once per battle, 5 shells on the nearest enemy after 2 s ----------
+function useStrike(p) {
+  if (p.dead || B.over) return;
+  const prof = WOV.profile;
+  if (p.strikeUsed) { B.ammoNote = { text: "Артудар уже використано в цьому бою", t: 1.8, col: "#e0604a" }; return; }
+  if (!(prof.ammo.strike > 0)) { B.ammoNote = { text: "Немає артударів, купи в магазині", t: 1.8, col: "#e0604a" }; WOV.haptic("error"); return; }
+  let tgt = null, bd = 900;
+  for (const o of B.units) if (!o.dead && o.team !== p.team && o.kind !== "plane" && (!B.dim || o.spotted)) { const d = Math.hypot(o.x - p.x, o.y - p.y); if (d < bd) { bd = d; tgt = o; } }
+  if (!tgt) { B.ammoNote = { text: "Немає цілі для артудару поблизу", t: 1.8, col: "#e0604a" }; return; }
+  prof.ammo.strike--; p.strikeUsed = true;
+  const x = tgt.x + Math.cos(tgt.angle) * tgt.vel * 1.2, y = tgt.y + Math.sin(tgt.angle) * tgt.vel * 1.2;
+  B.strikes.push({ x, y, t: 2.2, e: 0, owner: p, booms: [0, 0.15, 0.3, 0.5, 0.7], ghost: false });
+  if (B.net) B.net.link.event({ k: "as", n: p.nid, x: Math.round(x), y: Math.round(y) });
+  alert("Артудар викликано!", "fire"); WOV.haptic("medium"); SFX("click");
+}
+function updateStrikes(dt) {
+  for (const st of B.strikes) {
+    if (st.t > 0) { st.t -= dt; continue; }
+    st.e += dt;
+    while (st.booms.length && st.booms[0] <= st.e) {
+      st.booms.shift();
+      const x = st.x + rnd(-65, 65), y = st.y + rnd(-65, 65), o = st.owner;
+      B.inStrike = true;
+      blast({ x, y, team: o.team, dmg: (70 + o.v.tier * 28) * 2.6, splash: 85, owner: o, ghost: st.ghost }, null);
+      B.inStrike = false;
+      SFX("boom", { x, y }); B.map.stamp({ t: "crater", x, y, a: 0, r: 14 });
+      for (let i = 0; i < 8; i++) B.parts.push({ x, y, vx: rnd(-40, 40), vy: rnd(-40, 40), life: rnd(0.8, 1.6), max: 1.6, c: "rgba(60,55,50,.5)", s: rnd(8, 14), smoke: true });
+      if (Math.hypot(x - B.cam.x - W / 2, y - B.cam.y - H / 2) < 500) B.cam.shake = Math.max(B.cam.shake, 6);
+    }
+  }
+  B.strikes = B.strikes.filter(st => st.t > 0 || st.booms.length);
+}
+function drawStrike(st) {
+  if (st.t <= 0) return;
+  const k = (performance.now() / 250) % 1;
+  ctx.strokeStyle = "rgba(255,90,50,.85)"; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(st.x, st.y, 90, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = "rgba(255,90,50," + (0.6 * (1 - k)) + ")"; ctx.beginPath(); ctx.arc(st.x, st.y, 90 * k, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(st.x - 14, st.y); ctx.lineTo(st.x + 14, st.y); ctx.moveTo(st.x, st.y - 14); ctx.lineTo(st.x, st.y + 14); ctx.stroke();
+  ctx.fillStyle = "#ff7a5a"; ctx.font = "900 13px system-ui"; ctx.textAlign = "center"; ctx.fillText("АРТУДАР " + Math.max(0, st.t).toFixed(1), st.x, st.y - 98);
+}
+
+// ---------- weather and spotting ----------
+function updateSpotting() {
+  const b = B;
+  for (const u of b.units) {
+    if (u.dead) continue;
+    if (!b.dim || u.team === 0) { u.spotted = true; continue; }
+    let s = u.flash > -1.5; // firing gives you away for a moment
+    if (!s) for (const a of b.units) if (!a.dead && a.team === 0 && (a.x - u.x) ** 2 + (a.y - u.y) ** 2 < 520 * 520) { s = true; break; }
+    u.spotted = s;
+  }
+}
+function drawWeather() {
+  const b = B, w = b.weather.id, p = b.player, px = p.x - b.cam.x, py = p.y - b.cam.y;
+  if (w === "evening") { ctx.fillStyle = "rgba(255,120,40,.10)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "rgba(40,10,60,.14)"; ctx.fillRect(0, 0, W, H); }
+  else if (w === "night") { const g = ctx.createRadialGradient(px, py, 120, px, py, Math.max(W, H) * 0.75); g.addColorStop(0, "rgba(6,10,28,.25)"); g.addColorStop(0.45, "rgba(6,10,28,.6)"); g.addColorStop(1, "rgba(4,6,18,.82)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  else if (w === "fog") { const g = ctx.createRadialGradient(px, py, 90, px, py, Math.max(W, H) * 0.7); g.addColorStop(0, "rgba(215,222,220,0)"); g.addColorStop(0.5, "rgba(215,222,220,.45)"); g.addColorStop(1, "rgba(215,222,220,.78)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  else if (w === "rain" && b.rain) {
+    ctx.fillStyle = "rgba(40,60,90,.16)"; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "rgba(200,215,235,.45)"; ctx.lineWidth = 1; ctx.beginPath();
+    for (const d of b.rain) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.l * 0.25, d.y + d.l); }
+    ctx.stroke();
+  }
 }
 
 // ---------- capture points mode ----------
@@ -455,6 +605,8 @@ function updateModules(u, dt) {
     if (u.hp <= 0.5) destroy(u, u.fireBy);
   }
   u.S = effective(u);
+  if (u.buff.speed) { u.S.speed *= 1.35; if (u.S.minSpeed) u.S.minSpeed *= 1.2; }
+  if (u.buff.reload) u.S.reload *= 0.6;
 }
 
 function hit(s, t) {
@@ -480,7 +632,7 @@ function hit(s, t) {
   }
   const dmg = Math.min(t.hp, s.dmg * mult * rnd(0.9, 1.1));
   if (t.remote) { netHit(t, dmg, s, impact); s.life = 0; s.owner.dmgDone += dmg; B.lastDmg = B.time; }
-  else { t.hp -= dmg; s.life = 0; s.owner.dmgDone += dmg; B.lastDmg = B.time; }
+  else { t.hp -= dmg; t.taken += dmg; s.life = 0; s.owner.dmgDone += dmg; B.lastDmg = B.time; }
   if (t.hp > 0.5 && !t.remote) damageModule(t, s, impact);
   const mine = s.owner.isPlayer, me = t.isPlayer;
   if (s.small) {
@@ -503,7 +655,15 @@ function destroy(t, by, fromNet) {
   spark(t.x, t.y, "#f0a050", 30, 220); spark(t.x, t.y, "#ffdf8a", 12, 120);
   for (let i = 0; i < 14; i++) B.parts.push({ x: t.x + rnd(-10, 10), y: t.y + rnd(-10, 10), vx: rnd(-30, 30), vy: rnd(-30, 30), life: rnd(1, 2.2), max: 2.2, c: "rgba(40,40,40,.55)", s: rnd(8, 16), smoke: true });
   if (t.kind !== "plane") B.wrecks.push({ x: t.x, y: t.y, a: t.angle, ta: t.tAngle, v: t.v, life: 60 });
-  if (by && by !== t) by.kills++;
+  if (by && by !== t) {
+    by.kills++;
+    if (!B.ms.firstBlood) B.ms.firstBlood = by.isPlayer ? 1 : -1;
+    if (by.isPlayer) {
+      if (Math.hypot(by.x - t.x, by.y - t.y) > 600) B.ms.longKill = 1;
+      if (t.kind === "plane") B.ms.planes++;
+      if (B.inStrike) B.ms.strikeKills++;
+    }
+  }
   if (B.tickets) B.tickets[t.team] -= 12;
   if (t.isPlayer && by && by !== t) B.killcam = { name: by.name, v: by.v.name, tier: by.v.tier, kind: by.kind, dist: Math.round(Math.hypot(by.x - t.x, by.y - t.y) / 4), hp: Math.round(Math.max(0, by.hp) / by.maxHp * 100), ammo: by.kind === "plane" ? "" : (AMMO[by.kind].find(a => a.id === by.ammo) || {}).name, t: 6 };
   B.feed.unshift({ a: by ? by.name : "?", at: by ? by.team : 0, b: t.name, bt: t.team, t: 6, mine: by && by.isPlayer });
@@ -778,6 +938,9 @@ function update(dt) {
   if (b.ammoNote) { b.ammoNote.t -= dt; if (b.ammoNote.t <= 0) b.ammoNote = null; }
   if (b.killcam) b.killcam.t -= dt;
   if (!b.over) updatePoints(dt);
+  updateCrates(dt); updateStrikes(dt); updateSpotting();
+  if (b.rain) for (const d of b.rain) { d.y += d.v * dt; d.x -= d.v * 0.25 * dt; if (d.y > H) { d.y = -20; d.x = Math.random() * (W + 100); } }
+  for (const u of b.units) for (const k in u.buff) { u.buff[k] -= dt; if (u.buff[k] <= 0) delete u.buff[k]; }
   // camera
   let focus = p;
   if (p.dead) { if (!b.spectate || b.spectate.dead) b.spectate = b.units.find(u => !u.dead && u.team === 0) || b.units.find(u => !u.dead); focus = b.spectate || p; }
@@ -823,6 +986,10 @@ function finish(result, fromNet) {
   WOV.save(); WOV.emit("wallet");
   const summary = { rankUp, repair, caps: p.caps || 0, vehicleId: (p.v.base || p.v).id, result, kills: p.kills, dmg: Math.round(p.dmgDone), coins, xp, boosted, survived: !p.dead, mode: b.mode.name + (b.net ? " · онлайн" : ""), online: !!b.net,
     board: b.units.slice().sort((x, y) => y.kills - x.kills || y.dmgDone - x.dmgDone).map(u => ({ name: u.name, team: u.team, v: u.v.name, kills: u.kills, dmg: Math.round(u.dmgDone), dead: !!u.dead, me: u.isPlayer, human: !!u.human })) };
+  const best = b.units.slice().sort((x, y) => y.kills - x.kills || y.dmgDone - x.dmgDone)[0];
+  summary.medalStats = { firstBlood: b.ms.firstBlood === 1, longKill: b.ms.longKill, planes: b.ms.planes, strikeKills: b.ms.strikeKills, taken: Math.round(p.taken), maxHp: p.maxHp,
+    hpLeft: Math.max(0, p.hp) / p.maxHp, crates: p.crates, top: best === p, lastAlly: !b.units.some(u => u.team === 0 && !u.isPlayer && !u.dead) };
+  summary.weather = b.weather.name;
   if (WOV.recordBattle) { summary.progress = WOV.recordBattle(summary); WOV.save(); }
   setTimeout(() => { if (B === b) { const cb = b.onEnd; stop(); cb && cb(summary); } }, 2200);
 }
@@ -860,6 +1027,7 @@ function render() {
   }
   for (const w of b.wrecks) if (vis(w.x, w.y, 80)) { ctx.globalAlpha = 0.9; WOV.drawVehicle(ctx, w.v, w.x, w.y, w.a, w.ta, { wreck: true }); }
   ctx.globalAlpha = 1;
+  for (const c of b.crates) if (vis(c.x, c.y, 80)) drawCrate(c);
   map.drawTreeShadows(ctx, sx, sy, W, H);
   const drawU = (u) => {
     if (u.kind === "tank" && u.wet) { ctx.strokeStyle = "rgba(220,240,240,.45)"; ctx.lineWidth = 2; const k = (performance.now() / 600) % 1; ctx.beginPath(); ctx.ellipse(u.x, u.y, u.r * (1.3 + k * 0.6), u.r * (1.1 + k * 0.5), u.angle, 0, TAU); ctx.stroke(); }
@@ -872,7 +1040,7 @@ function render() {
       ctx.fillText((u.human ? "◆ " : "") + u.name + " · " + WOV.ROMAN[u.v.tier], u.x, yy - 3);
     }
   };
-  for (const u of b.units) if (!u.dead && u.kind !== "plane" && vis(u.x, u.y, 80)) drawU(u);
+  for (const u of b.units) if (!u.dead && u.spotted !== false && u.kind !== "plane" && vis(u.x, u.y, 80)) drawU(u);
   map.drawTrees(ctx, sx, sy, W, H);
   for (const s of b.shells) {
     if (!vis(s.x, s.y, 30)) continue;
@@ -885,7 +1053,8 @@ function render() {
     if (q.smoke) { ctx.beginPath(); ctx.arc(q.x, q.y, q.s, 0, TAU); ctx.fill(); } else ctx.fillRect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s);
   }
   ctx.globalAlpha = 1;
-  for (const u of b.units) if (!u.dead && u.kind === "plane" && vis(u.x, u.y, 80)) drawU(u);
+  for (const u of b.units) if (!u.dead && u.spotted !== false && u.kind === "plane" && vis(u.x, u.y, 80)) drawU(u);
+  for (const st of b.strikes) drawStrike(st);
   ctx.font = "bold 13px system-ui, sans-serif"; ctx.textAlign = "center";
   for (const f of b.texts) { ctx.globalAlpha = clamp(f.life * 1.5, 0, 1); ctx.fillStyle = "#000"; ctx.fillText(f.s, f.x + 1, f.y + 1); ctx.fillStyle = f.c; ctx.fillText(f.s, f.x, f.y); }
   ctx.globalAlpha = 1;
@@ -897,8 +1066,9 @@ function render() {
     ctx.strokeStyle = "rgba(217,164,65,.5)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, p.r + (p.kind === "ship" ? p.r * 0.9 : 8), 0, TAU); ctx.stroke();
   }
   ctx.restore();
+  drawWeather();
   // edge arrows for off-screen enemies
-  for (const u of b.units) if (!u.dead && u.team === 1 && !vis(u.x, u.y, 0)) {
+  for (const u of b.units) if (!u.dead && u.team === 1 && u.spotted !== false && !vis(u.x, u.y, 0)) {
     const cx = W / 2, cy = H / 2, a = Math.atan2(u.y - (sy + cy), u.x - (sx + cx));
     const ex = clamp(cx + Math.cos(a) * W, 18, W - 18), ey = clamp(cy + Math.sin(a) * H, 90, H - 18);
     ctx.save(); ctx.translate(ex, ey); ctx.rotate(a); ctx.fillStyle = "rgba(224,96,74,.75)";
@@ -972,11 +1142,13 @@ function drawHUD() {
   });
   ctx.globalAlpha = 1;
   // minimap
-  const ms = Math.min(110, W * 0.28), mx = W - ms - 10, my = top + 42, k = ms / b.map.size;
-  ctx.fillStyle = "rgba(10,14,13,.6)"; ctx.fillRect(mx - 3, my - 3, ms + 6, ms + 6);
+  const mr = miniRect(), ms = mr.s, mx = mr.x, my = mr.y, k = ms / b.map.size;
+  ctx.fillStyle = miniDrag.id !== null && miniDrag.moved ? "rgba(217,164,65,.7)" : "rgba(10,14,13,.6)"; ctx.fillRect(mx - 3, my - 3, ms + 6, ms + 6);
   ctx.drawImage(b.map.mini, mx, my, ms, ms);
   ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 1; ctx.strokeRect(mx + b.cam.x * k, my + b.cam.y * k, W * k, H * k);
-  for (const u of b.units) if (!u.dead) {
+  for (const c of b.crates) { ctx.fillStyle = CRATE[c.kind].col; ctx.fillRect(mx + c.x * k - 2, my + c.y * k - 2, 4, 4); ctx.strokeStyle = "#3a2a14"; ctx.lineWidth = 1; ctx.strokeRect(mx + c.x * k - 2, my + c.y * k - 2, 4, 4); }
+  for (const st of b.strikes) { ctx.strokeStyle = "#ff5a32"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(mx + st.x * k, my + st.y * k, 5, 0, TAU); ctx.stroke(); }
+  for (const u of b.units) if (!u.dead && u.spotted !== false) {
     const ux = mx + u.x * k, uy = my + u.y * k;
     ctx.fillStyle = u.isPlayer ? "#fff" : TEAM_COL[u.team];
     if (u.kind === "plane") { ctx.beginPath(); ctx.moveTo(ux, uy - 3); ctx.lineTo(ux + 3, uy + 2); ctx.lineTo(ux - 3, uy + 2); ctx.fill(); }
@@ -1038,6 +1210,15 @@ function drawControls(p) {
       ctx.fillStyle = sel ? "#1d1a12" : c.a.col; ctx.font = "900 11px system-ui, sans-serif"; ctx.fillText(c.a.short, c.x, c.y + (left === Infinity ? 4 : 0));
       if (left !== Infinity) { ctx.font = "700 9px system-ui, sans-serif"; ctx.fillText(left, c.x, c.y + 11); }
       if (!usingTouch) { ctx.globalAlpha = 0.7; ctx.fillStyle = "#e8e4d8"; ctx.font = "700 9px system-ui"; ctx.fillText(c.i + 1, c.x - c.r + 2, c.y - c.r + 6); }
+      ctx.globalAlpha = 1;
+    } else if (c.k === "strike") {
+      const n = WOV.profile.ammo.strike || 0, off = p.strikeUsed || n <= 0;
+      ctx.globalAlpha = off ? 0.35 : 0.92;
+      ctx.fillStyle = "rgba(10,14,13,.72)"; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "#ff7a3a"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = "#ff7a3a"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y - 3, 7, 0, TAU); ctx.moveTo(c.x - 11, c.y - 3); ctx.lineTo(c.x + 11, c.y - 3); ctx.moveTo(c.x, c.y - 14); ctx.lineTo(c.x, c.y + 8); ctx.stroke();
+      ctx.fillStyle = "#ff7a3a"; ctx.font = "700 9px system-ui, sans-serif"; ctx.fillText(p.strikeUsed ? "✓" : n, c.x, c.y + 16);
+      if (!usingTouch) { ctx.globalAlpha = 0.7; ctx.fillStyle = "#e8e4d8"; ctx.fillText("F", c.x - c.r + 2, c.y - c.r + 6); }
       ctx.globalAlpha = 1;
     } else {
       const n = WOV.profile.ammo.repair || 0, off = p.repairUsed || n <= 0;
