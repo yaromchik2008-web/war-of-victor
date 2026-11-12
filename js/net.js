@@ -63,7 +63,11 @@ function allowMessages(cb) {
 }
 const stopMessages = cb => api("notify", { on: false }).then(() => cb && cb(true)).catch(() => cb && cb(false));
 const claim = () => api("claim").then(j => applyClaim(j.claim)).catch(() => null);
-const reportBattle = s => api("battle", { kills: s.kills, dmg: s.dmg, xp: s.xp, win: s.result === "win" }).catch(() => null);
+// best vehicle shown on the friend card: highest tier owned
+const bestOwned = () => WOV.profile.owned.map(id => WOV.byId[id]).filter(Boolean).sort((a, b) => b.tier - a.tier || (b.prem ? 1 : 0) - (a.prem ? 1 : 0))[0];
+const reportBattle = s => api("battle", { kills: s.kills, dmg: s.dmg, xp: s.xp, win: s.result === "win", medals: WOV.profile.medals, best: (bestOwned() || {}).id }).catch(() => null);
+const friend = code => api("friend", { code });
+const challenge = (code, room) => api("challenge", { code, room });
 const top = by => api("top", { by });
 // Telegram Stars: get an invoice link from the server and open Telegram's payment sheet
 function buy(product, done) {
@@ -80,9 +84,10 @@ function buy(product, done) {
 }
 
 // ---------- matchmaking: one presence channel per mode; only vehicles within one tier of each other meet ----------
-const WAIT = 9000;
 function findMatch(me, h) {
-  const mode = WOV.MODES[me.mode] ? me.mode : "quick", MAXP = Math.min(10, WOV.MODES[mode].team * 2);
+  // me.room: a private duel room for two friends (no tier limits, waits up to 90 s for the friend)
+  const room = me.room || null, WAIT = room ? 90000 : 9000;
+  const mode = room ? "quick" : WOV.MODES[me.mode] ? me.mode : "quick", MAXP = room ? 2 : Math.min(10, WOV.MODES[mode].team * 2);
   let ch = null, done = false, timer = null;
   const t0 = Date.now();
   const finish = fn => { if (done) return; done = true; clearInterval(timer); if (ch) { ch.untrack().catch(() => {}); sb.removeChannel(ch); } fn(); };
@@ -94,16 +99,16 @@ function findMatch(me, h) {
   const tick = () => {
     if (done) return;
     // only players whose vehicle tier is close to mine count: a tier I vehicle never meets a tier V one
-    const list = waiting().filter(m => Math.abs((m.tier || 1) - me.tier) <= 1), left = Math.max(0, Math.ceil((t0 + WAIT - Date.now()) / 1000));
+    const list = waiting().filter(m => room || Math.abs((m.tier || 1) - me.tier) <= 1), left = Math.max(0, Math.ceil((t0 + WAIT - Date.now()) / 1000));
     h.status(list.length, left);
     // the leader keeps a spread of at most one tier: [t-1, t] or [t, t+1], whichever has more players
     const lo = list.filter(m => m.tier <= me.tier), hi = list.filter(m => m.tier >= me.tier);
-    const fair = lo.length >= hi.length ? lo : hi;
+    const fair = room ? list : lo.length >= hi.length ? lo : hi;
     if (list[0] && list[0].id === me.id) {
       // I waited longest: I build the match (and later host the bots)
       if (fair.length >= MAXP || (Date.now() - t0 > WAIT && fair.length >= 2)) {
         const players = fair.slice(0, MAXP).map(m => ({ id: m.id, name: m.name, vid: m.vid, camo: m.camo }));
-        const match = { mode, mid: me.id + "-" + Date.now().toString(36), host: me.id, seed: Math.floor(Math.random() * 1e9), players };
+        const match = { mode, duel: !!room, mid: me.id + "-" + Date.now().toString(36), host: me.id, seed: Math.floor(Math.random() * 1e9), players };
         ch.send({ type: "broadcast", event: "match", payload: match });
         finish(() => h.match(match));
       } else if (Date.now() - t0 > WAIT) finish(() => h.timeout());
@@ -111,7 +116,7 @@ function findMatch(me, h) {
   };
   client().then(c => {
     if (done) return;
-    ch = c.channel("wov-mm-v2-" + mode, { config: { presence: { key: me.id }, broadcast: { self: false } } });
+    ch = c.channel(room ? "wov-room-" + room : "wov-mm-v2-" + mode, { config: { presence: { key: me.id }, broadcast: { self: false } } });
     ch.on("presence", { event: "sync" }, tick);
     ch.on("broadcast", { event: "match" }, ({ payload }) => { if (payload.players.some(p => p.id === me.id)) finish(() => h.match(payload)); });
     ch.subscribe(st => {
@@ -149,5 +154,5 @@ function joinMatch(mid, h) {
   };
 }
 
-WOV.Net = { enabled, myId, inTelegram: () => !!(tg && tg.initData), hello, claim, allowMessages, stopMessages, reportBattle, top, buy, findMatch, joinMatch };
+WOV.Net = { enabled, myId, inTelegram: () => !!(tg && tg.initData), hello, claim, friend, challenge, allowMessages, stopMessages, reportBattle, top, buy, findMatch, joinMatch };
 })();

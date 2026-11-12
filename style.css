@@ -368,3 +368,16 @@ input { font: inherit; }
 .set-row .seg { width: 100%; }
 .set-row .seg button { padding: 8px 6px; }
 .set-row .seg button.active { background: var(--accent); color: #1d1a12; }
+/* friend card */
+.friend { width: 100%; text-align: left; color: var(--ink); font: inherit; }
+.friend .go { color: var(--muted); font-size: 22px; padding: 0 4px; flex: none; }
+.friend .avatar svg { display: block; }
+.fhead { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.fhead > div { min-width: 0; }
+.fhead h2 { margin: 0; overflow-wrap: anywhere; }
+.avatar.big { width: 56px; height: 56px; border-radius: 14px; font-size: 22px; flex: none; }
+.confirm { width: 100%; background: rgba(224,96,74,.12); border: 1px solid rgba(224,96,74,.45); border-radius: 12px; padding: 12px; }
+.confirm b { display: block; font-size: 14px; } .confirm small { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+.confirm .actions { margin-top: 10px; }
+.btn-danger { flex: 1; padding: 12px; border-radius: 12px; background: var(--bad); color: #fff; font-weight: 800; font-size: 14px; }
+.friend .avatar { flex: none; display: grid; place-items: center; }

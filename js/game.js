@@ -294,6 +294,7 @@ function start(modeId, onEnd, match) {
     B.net = { link, match, myAbs: online.myTeam, hostId0: match.host, host: match.host, t0: performance.now(), humans: match.players.length };
     link.state(netState); netOwners();
     B.banner.sub = "Онлайн: " + match.players.length + " гравц" + (match.players.length < 5 ? "і" : "ів") + ", решта боти";
+    if (match.duel) { B.banner.text = "ВИКЛИК ДРУГА"; B.banner.sub = "Ви в різних командах, решта боти"; }
   }
   setAmmo(B.player, prof.ammoSel[pv.kind] || "", true);
   if (mode.points) setupPoints(map, mode, match ? seeded(match.seed ^ 0x77777) : null);

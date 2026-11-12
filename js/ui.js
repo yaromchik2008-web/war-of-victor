@@ -459,13 +459,78 @@ function renderFriends() {
   $("#friendCount").textContent = p.friends.length ? "· " + p.friends.length : "";
   if (!p.friends.length) list.appendChild(el("div", "empty", "Поки що порожньо. Запроси друзів або додай їх за кодом."));
   for (const f of p.friends) {
-    const row = el("div", "friend", '<div class="avatar">' + (f.name[0] || "?").toUpperCase() + "</div><div><b></b><small>код " + f.code + (f.viaInvite ? " · запросив тебе" : "") + '</small></div><button aria-label="Видалити">✕</button>');
+    const R = f.xp !== undefined ? WOV.rank(f.xp).r : null;
+    const row = el("button", "friend", '<div class="avatar' + (R && R.ins === "gen" ? " gen" : "") + '">' + (R ? WOV.rankIcon(R, 24) : escapeHtml((f.name[0] || "?").toUpperCase())) + "</div><div><b></b><small>" + (R ? R.name + " · " : "") + "код " + f.code + (f.viaInvite ? " · запросив тебе" : "") + '</small></div><span class="go">›</span>');
     row.querySelector("b").textContent = f.name;
-    row.querySelector("button").onclick = () => { p.friends = p.friends.filter(x => x !== f); WOV.save(); renderFriends(); };
+    row.onclick = () => friendSheet(f);
     list.appendChild(row);
   }
   const s = p.stats, wr = s.battles ? Math.round(s.wins / s.battles * 100) : 0;
   $("#myStats").innerHTML = "<div><b>" + s.battles + "</b><small>боїв</small></div><div><b>" + wr + "%</b><small>перемог</small></div><div><b>" + s.kills + "</b><small>знищено</small></div><div><b style='font-size:13px'>" + WOV.rank().r.name + "</b><small>звання</small></div>";
+}
+// ---------- friend card: rank, stats, medals, challenge to a duel, remove with confirmation ----------
+function friendSheet(f) {
+  const p = WOV.profile, online = WOV.Net && WOV.Net.enabled() && WOV.Net.inTelegram();
+  const body = info => {
+    const R = info && info.found ? WOV.rank(info.xp).r : null, wr = info && info.battles ? Math.round(info.wins / info.battles * 100) : 0;
+    const best = info && info.best && WOV.byId[info.best];
+    let h = '<div class="fhead"><span class="avatar big' + (R && R.ins === "gen" ? " gen" : "") + '">' + (R ? WOV.rankIcon(R, 40) : escapeHtml((f.name[0] || "?").toUpperCase())) + '</span><div><h2 id="fName"></h2><div class="sub">' +
+      (R ? R.name : "Звання невідоме") + (info && info.online ? ' · <span style="color:var(--good)">у грі</span>' : "") + " · код " + f.code + "</div></div></div>";
+    if (!info) h += '<div class="empty">' + (online ? "Завантаження профілю…" : "Профіль друга видно, коли гра відкрита в Telegram.") + "</div>";
+    else if (!info.found) h += '<div class="empty">Друг ще не зіграв жодного бою, тож профілю поки немає.</div>';
+    else {
+      h += '<div class="earn"><div><b>' + fmt(info.battles) + "</b><small>боїв</small></div><div><b>" + wr + "%</b><small>перемог</small></div><div><b>" + fmt(info.kills) + "</b><small>знищено</small></div><div><b>" + fmt(info.dmg) + "</b><small>шкоди</small></div></div>";
+      if (best) h += '<div class="res-line">🏆 Найкраща техніка: <b>' + best.name + "</b> · ранг " + WOV.ROMAN[best.tier] + "</div>";
+      h += '<div class="row-title">Досягнення</div><div class="hall-grid">' + WOV.MEDALS.map(m => { const n = (info.medals || {})[m.id] || 0; return '<div class="hall' + (n ? "" : " none") + '"><span>' + m.ico + "</span><b>" + m.name + "</b>" + (n ? "<i>×" + n + "</i>" : "") + "</div>"; }).join("") + "</div>";
+    }
+    h += '<div class="actions" id="fAct"><button class="btn-sec" id="fDel">Видалити з друзів</button><button class="btn-main" id="fDuel">⚔️ Викликати</button></div>';
+    return h;
+  };
+  const show = info => openSheet(body(info), sh => {
+    sh.querySelector("#fName").textContent = f.name;
+    sh.querySelector("#fDuel").onclick = () => challengeFriend(f);
+    // removal needs two taps: the first one asks for confirmation
+    sh.querySelector("#fDel").onclick = () => {
+      WOV.haptic("warning");
+      const act = sh.querySelector("#fAct");
+      act.innerHTML = '<div class="confirm"><b>Точно видалити <span></span> з друзів?</b><small>Щоб повернути, доведеться додати його знову за кодом.</small><div class="actions"><button class="btn-sec" id="fNo">Скасувати</button><button class="btn-danger" id="fYes">Так, видалити</button></div></div>';
+      act.querySelector("span").textContent = f.name;
+      act.querySelector("#fNo").onclick = () => show(info);
+      act.querySelector("#fYes").onclick = () => { p.friends = p.friends.filter(x => x.code !== f.code); WOV.save(); WOV.haptic("success"); closeSheet(); renderFriends(); toast(f.name + " більше не в друзях"); };
+    };
+  });
+  show(null);
+  if (!online) return;
+  WOV.Net.friend(f.code).then(info => {
+    if (info.found) { let ch = false; if (info.name && info.name !== f.name && /^Друг /.test(f.name)) { f.name = info.name; ch = true; } if (f.xp !== info.xp) { f.xp = info.xp; ch = true; } if (ch) { WOV.save(); renderFriends(); } }
+    if (!$("#modal").classList.contains("hidden") && $("#fName") && $("#fName").textContent === f.name) show(info);
+  }).catch(() => {});
+}
+const duelRoom = code => [WOV.profile.code, code].sort().join("-");
+function challengeFriend(f) {
+  if (!WOV.Net || !WOV.Net.enabled() || !WOV.Net.inTelegram()) { toast("Виклик на бій працює в Telegram"); return; }
+  const room = duelRoom(f.code);
+  WOV.Net.challenge(f.code, room).then(r => {
+    if (!r.ok) { toast(r.error === "wait" ? "Зачекай пів хвилини перед новим викликом" : f.name + " ще не запускав бота, тож виклик не дійде. Попроси його натиснути /start у боті", 4000); return; }
+    duelSheet(room, f.name);
+  }).catch(() => toast("Сервер не відповідає. Спробуй пізніше."));
+}
+// both friends wait in the same room; when both are there, the battle starts (you on opposite teams, bots fill the rest)
+function duelSheet(room, who) {
+  const v = WOV.currentVehicle(), camo = WOV.camoOf(v);
+  $("#modal").dataset.lock = "1";
+  openSheet('<h2>Виклик на бій</h2><div class="sub">' + (who ? "Ти викликав <b></b>. Бот уже надіслав йому кнопку" : "Приймаємо виклик друга") + '. Ви будете в різних командах, решта місць боти.</div>' +
+    '<div class="mm"><div class="radar"><i></i></div><div><b id="mmCount">Підключення…</b><small id="mmLeft"></small></div></div>' +
+    '<div class="actions"><button class="btn-sec" id="mmCancel">Скасувати</button></div>', sh => {
+    if (who) sh.querySelector(".sub b").textContent = who;
+    sh.querySelector("#mmCancel").onclick = () => { if (mmCancel) mmCancel(); mmCancel = null; delete $("#modal").dataset.lock; closeSheet(); };
+  });
+  mode = "quick";
+  mmCancel = WOV.Net.findMatch({ id: WOV.Net.myId, name: WOV.profile.name, vid: v.id, kind: v.kind, tier: v.tier, camo: camo ? camo.id : "", mode: "quick", room }, {
+    status(n, left) { const c = $("#mmCount"), l = $("#mmLeft"); if (!c) return; c.textContent = n <= 1 ? "Чекаємо на друга…" : "Друг тут, починаємо!"; l.textContent = left > 0 ? "Ще " + left + " с" : ""; },
+    match(m) { mmCancel = null; WOV.haptic("success"); launch(m); },
+    timeout() { mmCancel = null; delete $("#modal").dataset.lock; if ($("#mmCount")) { closeSheet(); toast("Друг не прийняв виклик. Спробуй пізніше", 3000); } },
+  });
 }
 $("#copyCode").onclick = () => { const l = WOV.inviteLink(); copy(l || WOV.profile.code, l ? "Посилання-запрошення скопійовано" : "Код скопійовано"); };
 $("#inviteBtn").onclick = () => {
@@ -713,13 +778,18 @@ WOV.load(() => {
   // purchases paid while the game was closed
   if (WOV.Net) WOV.Net.hello().then(msg => { if (msg) toast("Покупка зарахована: " + msg, 4000); });
   applyOrient();
+  // opened from the bot's "accept challenge" button
+  let duel = null; try { duel = new URLSearchParams(location.search).get("duel"); } catch (e) {}
+  if (duel && /^[0-9A-Z]{2,16}-[0-9A-Z]{2,16}$/.test(duel) && duel.split("-").includes(WOV.profile.code) && WOV.Net && WOV.Net.enabled()) {
+    setTimeout(() => duelSheet(duel, null), 500);
+  }
   // ask once (after a couple of battles) whether the bot may send reminders
   if (WOV.Net && WOV.Net.inTelegram() && !WOV.profile.notifyAsked && WOV.profile.stats.battles >= 2) setTimeout(() => {
     WOV.profile.notifyAsked = true; WOV.save();
     WOV.Net.allowMessages(ok => { if (ok) { WOV.profile.notify = true; WOV.save(); toast("Бот нагадуватиме про щоденні нагороди"); } });
   }, 2500);
   if (!WOV.loginState().claimed) setTimeout(() => {
-    const st = WOV.loginState(); if (st.claimed || WOV.Battle.active()) return;
+    const st = WOV.loginState(); if (st.claimed || WOV.Battle.active() || mmCancel) return;
     openSheet('<h2>Щоденний вхід</h2><div class="sub">Заходь щодня: що довша серія, то краща нагорода. Пропустиш день, і серія почнеться знову.</div><div id="loginSheet"></div>', sh => renderLogin(sh.querySelector("#loginSheet")));
   }, 1200);
 });
