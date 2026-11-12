@@ -19,18 +19,20 @@ WOV.STAR_PACKS = [
   { id: "pack75", stars: 75, crystals: 400, coins: 40000, title: "Набір командира" },
 ];
 
-WOV.ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII"];
+WOV.ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+WOV.MAX_TIER = 10;
 WOV.KIND_NAME = { tank: "Танки", plane: "Літаки", ship: "Кораблі" };
 WOV.KIND_ONE = { tank: "Танк", plane: "Літак", ship: "Корабель" };
-WOV.PRICE = [0, 1500, 5000, 12000, 25000, 45000, 75000, 120000];
+// every tier costs much more than the previous one
+WOV.PRICE = [0, 2500, 8000, 20000, 42000, 75000, 120000, 190000, 290000, 420000, 600000];
 
 const V = [];
 // ---------- tanks ----------
 // role: light | medium | heavy | mbt. look: hull length/width, turret shape, barrel, etc.
-function tank(id, name, tier, role, nation, look, prem) {
+function tank(id, name, tier, role, nation, look, prem, stars) {
   const k = { light: { sp: 1.3, hp: 0.8, ar: 1.15, rl: 0.85, dm: 0.85 }, medium: { sp: 1, hp: 1, ar: 1, rl: 1, dm: 1 },
               heavy: { sp: 0.72, hp: 1.3, ar: 0.75, rl: 1.25, dm: 1.2 }, mbt: { sp: 1.05, hp: 1.1, ar: 0.85, rl: 0.95, dm: 1.05 } }[role];
-  V.push({ id, name, tier, kind: "tank", role, nation, prem: prem || 0,
+  V.push({ id, name, tier, kind: "tank", role, nation, prem: prem || 0, stars: stars || 0,
     r: 14 + tier * 0.9 + (role === "heavy" ? 2 : role === "light" ? -1 : 0),
     hp: Math.round((90 + tier * 38) * k.hp), speed: Math.round((100 + tier * 6) * k.sp), turn: 2.5 * (role === "heavy" ? 0.8 : 1), tturn: 2.6 + tier * 0.15,
     reload: +(1.7 * k.rl - tier * 0.04).toFixed(2), dmg: Math.round((24 + tier * 10) * k.dm), shell: 520 + tier * 28, range: 1.35 + tier * 0.03,
@@ -39,25 +41,45 @@ function tank(id, name, tier, role, nation, look, prem) {
 }
 tank("t26", "Т-26", 1, "light", "СРСР", { L: 1.15, Wd: 0.85, turret: "round", tR: 0.5, bL: 1.0, bW: 3, color: "#6f7d4f" });
 tank("bt7", "БТ-7", 1, "light", "СРСР", { L: 1.3, Wd: 0.8, turret: "box", tR: 0.5, bL: 1.05, bW: 3, color: "#7b8653" });
+tank("pz2", "Pz.Kpfw. II", 1, "light", "Німеччина", { L: 1.15, Wd: 0.82, turret: "box", tR: 0.46, tPos: 0.1, bL: 0.85, bW: 2.6, color: "#8a8c7a" });
+tank("stuart", "M3 Stuart", 1, "light", "США", { L: 1.1, Wd: 0.9, turret: "box", tR: 0.5, bL: 0.95, bW: 3, color: "#6d6b48" });
 tank("t34", "Т-34", 2, "medium", "СРСР", { L: 1.25, Wd: 0.98, turret: "wedge", tR: 0.58, tPos: 0.15, bL: 1.3, bW: 4, color: "#5f6f43" });
 tank("sherman", "M4 Sherman", 2, "medium", "США", { L: 1.2, Wd: 0.95, turret: "round", tR: 0.6, bL: 1.2, bW: 4, color: "#6c6a45" });
+tank("pz4", "Pz.Kpfw. IV H", 2, "medium", "Німеччина", { L: 1.25, Wd: 0.95, turret: "box", tR: 0.56, bL: 1.45, bW: 3.6, skirts: true, brake: true, color: "#9a8d5c" });
+tank("cromwell", "Cromwell", 2, "medium", "Британія", { L: 1.25, Wd: 0.98, turret: "box", tR: 0.58, bL: 1.25, bW: 4, color: "#626c48" });
 tank("kv1", "КВ-1", 3, "heavy", "СРСР", { L: 1.3, Wd: 1.05, turret: "box", tR: 0.66, bL: 1.25, bW: 5, color: "#566440" });
-tank("panther", "Panther", 3, "medium", "Німеччина", { L: 1.4, Wd: 0.98, turret: "wedge", tR: 0.56, tPos: -0.05, bL: 1.7, bW: 4, brake: true, skirts: true, color: "#a0905a" });
+tank("t3485", "Т-34-85", 3, "medium", "СРСР", { L: 1.27, Wd: 0.98, turret: "round", tR: 0.62, tPos: 0.08, bL: 1.6, bW: 4.4, color: "#5b6a40" });
+tank("firefly", "Sherman Firefly", 3, "medium", "Британія", { L: 1.2, Wd: 0.95, turret: "round", tR: 0.6, tPos: 0.02, bL: 1.85, bW: 4, brake: true, color: "#6a6a48" });
+tank("panther", "Panther", 4, "medium", "Німеччина", { L: 1.4, Wd: 0.98, turret: "wedge", tR: 0.56, tPos: -0.05, bL: 1.7, bW: 4, brake: true, skirts: true, color: "#a0905a" });
 tank("tiger", "Tiger I", 4, "heavy", "Німеччина", { L: 1.3, Wd: 1.08, turret: "box", tR: 0.68, bL: 1.6, bW: 5, brake: true, color: "#8f8456" });
 tank("is2", "ІС-2", 4, "heavy", "СРСР", { L: 1.35, Wd: 1.02, turret: "round", tR: 0.64, tPos: 0.05, bL: 1.7, bW: 5, brake: true, color: "#56653f" });
+tank("pershing", "M26 Pershing", 4, "medium", "США", { L: 1.35, Wd: 1.0, turret: "dome", tR: 0.62, tPos: 0.05, bL: 1.7, bW: 4.5, brake: true, color: "#61653f" });
 tank("t54", "Т-54", 5, "medium", "СРСР", { L: 1.3, Wd: 1.0, turret: "dome", tR: 0.62, tPos: 0.12, bL: 1.6, bW: 4.5, color: "#5d6b45" });
 tank("centurion", "Centurion", 5, "medium", "Британія", { L: 1.4, Wd: 1.0, turret: "wedge", tR: 0.62, bL: 1.75, bW: 4.5, skirts: true, color: "#6a7350" });
+tank("is3", "ІС-3", 5, "heavy", "СРСР", { L: 1.4, Wd: 1.04, turret: "dome", tR: 0.66, tPos: 0.02, bL: 1.8, bW: 5, brake: true, pike: true, color: "#55623f" });
 tank("leo1", "Leopard 1", 6, "mbt", "ФРН", { L: 1.4, Wd: 0.98, turret: "wedge", tR: 0.6, bL: 1.85, bW: 4.5, skirts: true, color: "#4f5a3c" });
-tank("t72", "Т-72", 6, "mbt", "СРСР", { L: 1.3, Wd: 1.0, turret: "dome", tR: 0.6, tPos: 0.08, bL: 1.85, bW: 5, skirts: true, color: "#5a6640" });
-tank("abrams", "M1 Abrams", 7, "mbt", "США", { L: 1.45, Wd: 1.05, turret: "modern", tR: 0.7, tPos: -0.05, bL: 1.8, bW: 5, skirts: true, color: "#9c9068" });
-tank("leo2", "Leopard 2A6", 7, "mbt", "ФРН", { L: 1.45, Wd: 1.02, turret: "modern", tR: 0.68, tPos: -0.02, bL: 2.0, bW: 5, skirts: true, color: "#56603f" });
+tank("t62", "Т-62", 6, "mbt", "СРСР", { L: 1.33, Wd: 1.0, turret: "dome", tR: 0.64, tPos: 0.1, bL: 1.9, bW: 4.6, color: "#5a6842" });
+tank("m60", "M60A1", 6, "mbt", "США", { L: 1.42, Wd: 1.04, turret: "wedge", tR: 0.66, bL: 1.85, bW: 4.8, color: "#646a45" });
+tank("t72", "Т-72", 7, "mbt", "СРСР", { L: 1.3, Wd: 1.0, turret: "dome", tR: 0.6, tPos: 0.08, bL: 1.85, bW: 5, skirts: true, era: true, color: "#5a6640" });
+tank("chieftain", "Chieftain Mk 10", 7, "mbt", "Британія", { L: 1.48, Wd: 1.02, turret: "wedge", tR: 0.64, tPos: 0.05, bL: 1.95, bW: 5, skirts: true, color: "#5c6346" });
+tank("abrams", "M1 Abrams", 8, "mbt", "США", { L: 1.45, Wd: 1.05, turret: "modern", tR: 0.7, tPos: -0.05, bL: 1.8, bW: 5, skirts: true, color: "#9c9068" });
+tank("t80", "Т-80Б", 8, "mbt", "СРСР", { L: 1.36, Wd: 1.0, turret: "dome", tR: 0.62, tPos: 0.08, bL: 1.9, bW: 5, skirts: true, era: true, color: "#56623f" });
+tank("leo2", "Leopard 2A6", 9, "mbt", "ФРН", { L: 1.45, Wd: 1.02, turret: "modern", tR: 0.68, tPos: -0.02, bL: 2.0, bW: 5, skirts: true, color: "#56603f" });
+tank("challenger2", "Challenger 2", 9, "mbt", "Британія", { L: 1.5, Wd: 1.06, turret: "modern", tR: 0.7, tPos: 0, bL: 1.9, bW: 5.2, skirts: true, color: "#8f8a66" });
+tank("t90", "Т-90А", 9, "mbt", "Росія", { L: 1.36, Wd: 1.02, turret: "modern", tR: 0.64, tPos: 0.06, bL: 1.9, bW: 5, skirts: true, era: true, color: "#5b6645" });
+tank("leo2a7", "Leopard 2A7", 10, "mbt", "ФРН", { L: 1.5, Wd: 1.04, turret: "modern", tR: 0.72, tPos: -0.02, bL: 2.05, bW: 5.2, skirts: true, color: "#5c6646" });
+tank("t14", "Т-14 Армата", 10, "mbt", "Росія", { L: 1.55, Wd: 1.0, turret: "modern", tR: 0.6, tPos: -0.08, bL: 2.05, bW: 5.2, skirts: true, color: "#6a6f58" });
+tank("type10", "Type 10", 10, "mbt", "Японія", { L: 1.4, Wd: 1.0, turret: "modern", tR: 0.66, tPos: 0, bL: 1.95, bW: 5, skirts: true, color: "#6b7255" });
+tank("m1a2", "M1A2 SEPv3", 10, "mbt", "США", { L: 1.48, Wd: 1.06, turret: "modern", tR: 0.72, tPos: -0.05, bL: 1.9, bW: 5.2, skirts: true, color: "#a0946c" });
 tank("tiger2", "Tiger II", 5, "heavy", "Німеччина", { L: 1.45, Wd: 1.1, turret: "wedge", tR: 0.7, tPos: -0.05, bL: 1.95, bW: 5.5, brake: true, color: "#8a7d55" }, 450);
+tank("jumbo", "M4A3E2 Jumbo", 4, "heavy", "США", { L: 1.22, Wd: 1.0, turret: "round", tR: 0.64, bL: 1.3, bW: 4.6, color: "#6a6845" }, 1, 150);
+tank("t44_100", "Т-44-100", 6, "medium", "СРСР", { L: 1.28, Wd: 0.98, turret: "dome", tR: 0.62, tPos: 0.1, bL: 1.95, bW: 4.6, color: "#5f6d45" }, 1, 300);
 
 // ---------- planes ----------
-function plane(id, name, tier, role, nation, look, prem) {
+function plane(id, name, tier, role, nation, look, prem, stars) {
   const jet = look.wing === "swept" || look.wing === "delta" || look.engines === "jet";
   const k = { fighter: { sp: 1, hp: 1, dm: 1, tn: 1 }, attacker: { sp: 0.85, hp: 1.6, dm: 1.35, tn: 0.8 }, heavy: { sp: 1.05, hp: 1.3, dm: 1.2, tn: 0.85 } }[role];
-  V.push({ id, name, tier, kind: "plane", role, nation, prem: prem || 0, r: 13 + tier * 0.6,
+  V.push({ id, name, tier, kind: "plane", role, nation, prem: prem || 0, stars: stars || 0, r: 13 + tier * 0.6,
     hp: Math.round((65 + tier * 16) * k.hp), speed: Math.round((215 + tier * 22 + (jet ? 40 : 0)) * k.sp), minSpeed: Math.round((150 + tier * 12) * k.sp),
     turn: +((2.7 - (jet ? 0.35 : 0) + tier * 0.03) * k.tn).toFixed(2), reload: 0.09, dmg: +((3.6 + tier * 1.1) * k.dm).toFixed(1),
     shell: 900 + tier * 40, range: 0.55, armor: [1, 1, 1],
@@ -65,25 +87,46 @@ function plane(id, name, tier, role, nation, look, prem) {
 }
 plane("i16", "І-16", 1, "fighter", "СРСР", { wing: "straight", span: 1.1, len: 0.85, color: "#7f8d5a" });
 plane("bf109", "Bf 109 E", 1, "fighter", "Німеччина", { wing: "straight", span: 1.15, len: 1.0, color: "#8a9296" });
+plane("i153", "І-153 Чайка", 1, "fighter", "СРСР", { wing: "straight", span: 1.05, len: 0.85, biplane: true, color: "#6f7f52" });
+plane("gladiator", "Gloster Gladiator", 1, "fighter", "Британія", { wing: "straight", span: 1.1, len: 0.9, biplane: true, color: "#9aa08a" });
 plane("spitfire", "Spitfire Mk V", 2, "fighter", "Британія", { wing: "elliptic", span: 1.3, len: 1.0, color: "#6f7a55" });
 plane("yak3", "Як-3", 2, "fighter", "СРСР", { wing: "straight", span: 1.15, len: 1.0, color: "#8c979c" });
+plane("hurricane", "Hurricane Mk II", 2, "fighter", "Британія", { wing: "straight", span: 1.3, len: 1.05, color: "#76704f" });
+plane("zero", "A6M Zero", 2, "fighter", "Японія", { wing: "straight", span: 1.35, len: 0.98, color: "#c9c4a8" });
 plane("p51", "P-51D Mustang", 3, "fighter", "США", { wing: "straight", span: 1.3, len: 1.05, color: "#b4b8b8" });
 plane("il2", "Іл-2", 3, "attacker", "СРСР", { wing: "straight", span: 1.45, len: 1.1, color: "#5f6b45" });
-plane("fw190", "Fw 190 A", 4, "fighter", "Німеччина", { wing: "straight", span: 1.2, len: 1.0, color: "#7b8488" });
-plane("me262", "Me 262", 4, "heavy", "Німеччина", { wing: "swept", span: 1.35, engines: 2, len: 1.15, color: "#848c7a" });
+plane("la5", "Ла-5ФН", 3, "fighter", "СРСР", { wing: "straight", span: 1.2, len: 1.0, radial: true, color: "#7f8a8e" });
+plane("ki84", "Ki-84 Hayate", 3, "fighter", "Японія", { wing: "straight", span: 1.25, len: 1.02, color: "#5f6a45" });
+plane("fw190", "Fw 190 A", 4, "fighter", "Німеччина", { wing: "straight", span: 1.2, len: 1.0, radial: true, color: "#7b8488" });
+plane("la7", "Ла-7", 4, "fighter", "СРСР", { wing: "straight", span: 1.2, len: 1.0, radial: true, color: "#8a9498" });
+plane("p38", "P-38 Lightning", 4, "heavy", "США", { wing: "straight", span: 1.55, engines: 2, len: 1.05, tail: "twin", boom: true, color: "#a9aeb0" });
+plane("me262", "Me 262", 5, "heavy", "Німеччина", { wing: "swept", span: 1.35, engines: 2, len: 1.15, color: "#848c7a" });
 plane("mig15", "МіГ-15", 5, "fighter", "СРСР", { wing: "swept", span: 1.15, engines: "jet", len: 1.1, tail: "t", color: "#a9adb0" });
 plane("f86", "F-86 Sabre", 5, "fighter", "США", { wing: "swept", span: 1.2, engines: "jet", len: 1.15, color: "#c2c4c4" });
-plane("mig21", "МіГ-21", 6, "fighter", "СРСР", { wing: "delta", span: 0.95, engines: "jet", len: 1.35, color: "#9aa2a6" });
-plane("f4", "F-4 Phantom II", 6, "heavy", "США", { wing: "swept", span: 1.1, engines: "jet", len: 1.35, color: "#7d8578" });
-plane("su27", "Су-27", 7, "fighter", "СРСР", { wing: "delta", span: 1.2, engines: "jet", len: 1.45, tail: "twin", color: "#8fa2b4" });
-plane("f16", "F-16", 7, "fighter", "США", { wing: "delta", span: 1.05, engines: "jet", len: 1.35, color: "#8f969c" });
-plane("p47", "P-47 Thunderbolt", 4, "attacker", "США", { wing: "elliptic", span: 1.4, len: 1.1, color: "#9a9f8a" }, 380);
+plane("meteor", "Gloster Meteor", 5, "heavy", "Британія", { wing: "straight", span: 1.4, engines: 2, len: 1.2, color: "#9ea7a0" });
+plane("mig17", "МіГ-17", 6, "fighter", "СРСР", { wing: "swept", span: 1.15, engines: "jet", len: 1.15, tail: "t", color: "#b0b4b6" });
+plane("hunter", "Hawker Hunter", 6, "fighter", "Британія", { wing: "swept", span: 1.15, engines: "jet", len: 1.25, color: "#7d8a78" });
+plane("f100", "F-100 Super Sabre", 6, "heavy", "США", { wing: "swept", span: 1.05, engines: "jet", len: 1.35, color: "#c4c6c6" });
+plane("mig21", "МіГ-21", 7, "fighter", "СРСР", { wing: "delta", span: 0.95, engines: "jet", len: 1.35, color: "#9aa2a6" });
+plane("f4", "F-4 Phantom II", 7, "heavy", "США", { wing: "swept", span: 1.1, engines: "jet", len: 1.35, color: "#7d8578" });
+plane("mig23", "МіГ-23", 8, "fighter", "СРСР", { wing: "swept", span: 1.15, engines: "jet", len: 1.4, color: "#8d9a8a" });
+plane("f14", "F-14 Tomcat", 8, "heavy", "США", { wing: "swept", span: 1.35, engines: "jet", len: 1.45, tail: "twin", color: "#a7adb2" });
+plane("tornado", "Tornado IDS", 8, "heavy", "Британія", { wing: "swept", span: 1.2, engines: "jet", len: 1.4, color: "#6f7867" });
+plane("su27", "Су-27", 9, "fighter", "СРСР", { wing: "delta", span: 1.2, engines: "jet", len: 1.45, tail: "twin", color: "#8fa2b4" });
+plane("f16", "F-16", 9, "fighter", "США", { wing: "delta", span: 1.05, engines: "jet", len: 1.35, color: "#8f969c" });
+plane("f15", "F-15 Eagle", 9, "heavy", "США", { wing: "delta", span: 1.25, engines: "jet", len: 1.45, tail: "twin", color: "#9aa3ab" });
+plane("su35", "Су-35", 10, "fighter", "Росія", { wing: "delta", span: 1.25, engines: "jet", len: 1.5, tail: "twin", color: "#8ea5b8" });
+plane("f22", "F-22 Raptor", 10, "fighter", "США", { wing: "delta", span: 1.2, engines: "jet", len: 1.45, tail: "twin", color: "#7f878d" });
+plane("typhoon", "Eurofighter Typhoon", 10, "fighter", "Британія", { wing: "delta", span: 1.1, engines: "jet", len: 1.45, canard: true, color: "#8c959b" });
+plane("p47", "P-47 Thunderbolt", 4, "attacker", "США", { wing: "elliptic", span: 1.4, len: 1.1, radial: true, color: "#9a9f8a" }, 380);
+plane("spit24", "Spitfire F Mk 24", 5, "fighter", "Британія", { wing: "elliptic", span: 1.25, len: 1.1, color: "#6b7a58" }, 1, 200);
+plane("f104", "F-104 Starfighter", 7, "fighter", "США", { wing: "straight", span: 0.75, engines: "jet", len: 1.5, tail: "t", color: "#b8bcbc" }, 1, 350);
 
 // ---------- ships ----------
-function ship(id, name, tier, role, nation, look, prem) {
+function ship(id, name, tier, role, nation, look, prem, stars) {
   const k = { boat: { sp: 1.6, hp: 0.55, tn: 1.8, rl: 0.6, dm: 0.55, rg: 0.8 }, destroyer: { sp: 1.2, hp: 0.85, tn: 1.2, rl: 0.8, dm: 0.8, rg: 0.95 },
               cruiser: { sp: 1, hp: 1, tn: 1, rl: 1, dm: 1, rg: 1 }, battleship: { sp: 0.75, hp: 1.5, tn: 0.7, rl: 1.4, dm: 1.5, rg: 1.15 } }[role];
-  V.push({ id, name, tier, kind: "ship", role, nation, prem: prem || 0, r: role === "boat" ? 15 : 20 + tier * 1.4 + (role === "battleship" ? 4 : 0),
+  V.push({ id, name, tier, kind: "ship", role, nation, prem: prem || 0, stars: stars || 0, r: role === "boat" ? 15 : 20 + tier * 1.4 + (role === "battleship" ? 4 : 0),
     hp: Math.round((160 + tier * 70) * k.hp), speed: Math.round((70 + tier * 2) * k.sp), turn: +(0.95 * k.tn).toFixed(2), tturn: 1.7,
     reload: +(2.2 * k.rl).toFixed(2), dmg: Math.round((34 + tier * 12) * k.dm), shell: 600 + tier * 15, range: +(1.7 * k.rg + tier * 0.04).toFixed(2),
     armor: [0.6, 1.0, 1.2], aa: { range: 380 + tier * 15, reload: role === "boat" ? 0.3 : 0.2, dmg: 3 + tier * 0.6 },
@@ -91,19 +134,30 @@ function ship(id, name, tier, role, nation, look, prem) {
 }
 ship("g5", "Катер Г-5", 1, "boat", "СРСР", { len: 1.35, beam: 0.5, turrets: 1, funnels: 0, bridge: 0.45, color: "#7a8a8f" });
 ship("pt109", "PT-109", 1, "boat", "США", { len: 1.45, beam: 0.52, turrets: 1, funnels: 0, bridge: 0.5, color: "#6d7d68" });
+ship("s100", "Шнельбот S-100", 1, "boat", "Німеччина", { len: 1.5, beam: 0.48, turrets: 1, funnels: 0, bridge: 0.48, color: "#8b9498" });
 ship("flower", "Корвет Flower", 2, "destroyer", "Британія", { len: 1.45, beam: 0.6, turrets: 1, funnels: 1, bridge: 0.6, color: "#8f9ca3" });
 ship("gnevny", "Есмінець Гнєвний", 2, "destroyer", "СРСР", { len: 1.65, beam: 0.52, turrets: 2, funnels: 2, bridge: 0.55, color: "#7b8a92" });
 ship("fletcher", "Есмінець Fletcher", 3, "destroyer", "США", { len: 1.7, beam: 0.52, turrets: 3, funnels: 2, bridge: 0.6, color: "#7d8b95" });
 ship("tashkent", "Лідер Ташкент", 3, "destroyer", "СРСР", { len: 1.8, beam: 0.5, turrets: 3, funnels: 3, bridge: 0.55, color: "#8a989f" });
+ship("fubuki", "Есмінець Fubuki", 3, "destroyer", "Японія", { len: 1.75, beam: 0.5, turrets: 3, funnels: 2, bridge: 0.55, color: "#80878c" });
 ship("atlanta", "Крейсер Atlanta", 4, "cruiser", "США", { len: 1.75, beam: 0.55, turrets: 4, funnels: 2, bridge: 0.7, color: "#7a8792" });
 ship("kirov", "Крейсер Кіров", 4, "cruiser", "СРСР", { len: 1.8, beam: 0.56, turrets: 3, funnels: 2, bridge: 0.7, color: "#86939b" });
+ship("belfast", "Крейсер Belfast", 4, "cruiser", "Британія", { len: 1.82, beam: 0.56, turrets: 4, funnels: 2, bridge: 0.75, color: "#8a959c" });
 ship("hipper", "Крейсер Admiral Hipper", 5, "cruiser", "Німеччина", { len: 1.85, beam: 0.56, turrets: 4, funnels: 1, bridge: 0.8, color: "#8d969a" });
 ship("baltimore", "Крейсер Baltimore", 5, "cruiser", "США", { len: 1.85, beam: 0.58, turrets: 3, funnels: 2, bridge: 0.8, color: "#77848d" });
 ship("marat", "Лінкор Марат", 6, "battleship", "СРСР", { len: 1.9, beam: 0.58, turrets: 4, funnels: 2, bridge: 0.75, color: "#808c93" });
-ship("bismarck", "Лінкор Bismarck", 6, "battleship", "Німеччина", { len: 1.9, beam: 0.62, turrets: 4, funnels: 1, bridge: 0.9, color: "#8b9397" });
-ship("yamato", "Лінкор Yamato", 7, "battleship", "Японія", { len: 1.95, beam: 0.66, turrets: 3, funnels: 1, bridge: 1.0, color: "#7d878c" });
-ship("iowa", "Лінкор Iowa", 7, "battleship", "США", { len: 2.0, beam: 0.6, turrets: 3, funnels: 2, bridge: 0.9, color: "#76838c" });
+ship("kongo", "Лінкор Kongō", 6, "battleship", "Японія", { len: 1.92, beam: 0.58, turrets: 4, funnels: 2, bridge: 0.9, color: "#7b8489" });
+ship("bismarck", "Лінкор Bismarck", 7, "battleship", "Німеччина", { len: 1.9, beam: 0.62, turrets: 4, funnels: 1, bridge: 0.9, color: "#8b9397" });
+ship("kgv", "Лінкор King George V", 7, "battleship", "Британія", { len: 1.92, beam: 0.62, turrets: 3, funnels: 2, bridge: 0.9, color: "#86919a" });
+ship("iowa", "Лінкор Iowa", 8, "battleship", "США", { len: 2.0, beam: 0.6, turrets: 3, funnels: 2, bridge: 0.9, color: "#76838c" });
+ship("sovsoyuz", "Лінкор Радянський Союз", 8, "battleship", "СРСР", { len: 1.98, beam: 0.64, turrets: 3, funnels: 1, bridge: 0.95, color: "#828e95" });
+ship("yamato", "Лінкор Yamato", 9, "battleship", "Японія", { len: 1.95, beam: 0.66, turrets: 3, funnels: 1, bridge: 1.0, color: "#7d878c" });
+ship("montana", "Лінкор Montana", 9, "battleship", "США", { len: 2.05, beam: 0.64, turrets: 4, funnels: 2, bridge: 0.95, color: "#74818a" });
+ship("slava", "Ракетний крейсер Слава", 10, "battleship", "СРСР", { len: 2.0, beam: 0.6, turrets: 2, funnels: 2, bridge: 1.05, missiles: true, color: "#8a959b" });
+ship("ticonderoga", "Крейсер Ticonderoga", 10, "battleship", "США", { len: 1.95, beam: 0.6, turrets: 2, funnels: 2, bridge: 1.1, missiles: true, color: "#8e979c" });
 ship("grafspee", "Крейсер Admiral Graf Spee", 5, "cruiser", "Німеччина", { len: 1.8, beam: 0.6, turrets: 2, funnels: 1, bridge: 0.95, color: "#959da0" }, 420);
+ship("z52", "Есмінець Z-52", 5, "destroyer", "Німеччина", { len: 1.8, beam: 0.52, turrets: 3, funnels: 2, bridge: 0.6, color: "#8b9397" }, 1, 200);
+ship("hood", "Лінійний крейсер Hood", 7, "battleship", "Британія", { len: 2.05, beam: 0.58, turrets: 4, funnels: 2, bridge: 0.9, color: "#8f9aa1" }, 1, 350);
 
 // give same-tier vehicles their own character: small deterministic stat differences per model
 for (const v of V) {
@@ -117,6 +171,8 @@ WOV.VEHICLES = V;
 WOV.byId = {}; for (const v of V) WOV.byId[v.id] = v;
 WOV.STARTERS = ["t26", "i16", "g5"];
 WOV.priceOf = v => (v.prem ? 0 : WOV.PRICE[v.tier]);
+// vehicles sold only for Telegram Stars (server product "v_<id>")
+WOV.STAR_VEHICLES = V.filter(v => v.stars).map(v => v.id);
 
 // ---------- camouflage (bought with crystals, applied to any vehicle) ----------
 WOV.CAMOS = [
@@ -137,15 +193,15 @@ WOV.CAMOS = [
 // ---------- boxes (bought with coins, give crystals and more) ----------
 WOV.BOXES = [
   { id: "wood", name: "Дерев'яний", price: 800, color: "#9a6b3c", rim: "#6b4523",
-    crystals: [3, 12], coins: [150, 900], camo: 0, prem: 0, boost: 0, desc: "3–12 кристалів і трохи монет" },
+    crystals: [1, 6], coins: [100, 600], camo: 0, prem: 0, boost: 0, desc: "1–6 кристалів і трохи монет" },
   { id: "iron", name: "Залізний", price: 2500, color: "#8b9399", rim: "#5d656b",
-    crystals: [12, 35], coins: [400, 2200], camo: 0.08, prem: 0, boost: 0.1, desc: "12–35 кристалів, шанс на камуфляж" },
+    crystals: [6, 18], coins: [300, 1600], camo: 0.08, prem: 0, boost: 0.1, desc: "6–18 кристалів, шанс на камуфляж" },
   { id: "gold", name: "Золотий", price: 7000, color: "#d9a441", rim: "#9c701e",
-    crystals: [35, 90], coins: [1000, 5000], camo: 0.2, prem: 0.05, boost: 0.2, desc: "35–90 кристалів, шанс на преміум-техніку" },
+    crystals: [18, 45], coins: [700, 3500], camo: 0.2, prem: 0.05, boost: 0.2, desc: "18–45 кристалів, шанс на преміум-техніку" },
   { id: "ammo", name: "Арсенал", price: 1500, color: "#6f7d4f", rim: "#454f30",
     crystals: [0, 4], coins: [0, 300], camo: 0, prem: 0, boost: 0, ammo: [3, 5], desc: "Преміум-снаряди і ремкомплекти" },
   { id: "legend", name: "Легендарний", price: 20000, color: "#9b6bd6", rim: "#5f3d92",
-    crystals: [110, 260], coins: [3000, 12000], camo: 0.35, prem: 0.18, boost: 0.3, desc: "110–260 кристалів, великий шанс на преміум" },
+    crystals: [55, 130], coins: [2000, 8000], camo: 0.35, prem: 0.18, boost: 0.3, desc: "55–130 кристалів, великий шанс на преміум" },
 ];
 WOV.BOOSTS = [{ price: 60, battles: 5 }, { price: 150, battles: 15 }];  // x2 coins for N battles, bought with crystals
 WOV.BOOST = WOV.BOOSTS[0];
@@ -155,12 +211,13 @@ WOV.EXCHANGE = WOV.EXCHANGES[0];
 // ---------- military ranks (replace plain levels); xp = total experience needed ----------
 // ins: insignia type + count. bar = soldier stripes, chev = sergeant chevrons, star = junior officer, big = senior officer, gen = general
 WOV.RANKS = [
-  ["Рекрут", 0, "bar", 0], ["Солдат", 400, "bar", 1], ["Старший солдат", 1000, "bar", 2],
-  ["Молодший сержант", 1900, "chev", 1], ["Сержант", 3000, "chev", 2], ["Старший сержант", 4500, "chev", 3], ["Головний сержант", 6400, "chev", 4], ["Штаб-сержант", 8800, "chev", 5],
-  ["Молодший лейтенант", 11800, "star", 1], ["Лейтенант", 15500, "star", 2], ["Старший лейтенант", 20000, "star", 3], ["Капітан", 25500, "star", 4],
-  ["Майор", 32000, "big", 1], ["Підполковник", 40000, "big", 2], ["Полковник", 50000, "big", 3],
-  ["Бригадний генерал", 63000, "gen", 1], ["Генерал-майор", 80000, "gen", 2], ["Генерал-лейтенант", 100000, "gen", 3], ["Генерал", 125000, "gen", 4],
-].map(([name, xp, ins, n], i) => ({ i, name, xp, ins, n, reward: { coins: 300 + i * 250, crystals: i >= 8 ? 10 + (i - 8) * 5 : 0 } }));
+  ["Рекрут", 0, "bar", 0], ["Солдат", 500, "bar", 1], ["Єфрейтор", 2100, "bar", 2], ["Старший солдат", 5000, "bar", 3],
+  ["Молодший сержант", 9200, "chev", 1], ["Сержант", 14700, "chev", 2], ["Старший сержант", 21500, "chev", 3], ["Штаб-сержант", 29800, "chev", 4],
+  ["Майстер-сержант", 39400, "chev", 5], ["Головний майстер-сержант", 50500, "chev", 6], ["Молодший лейтенант", 62900, "star", 1], ["Лейтенант", 76900, "star", 2],
+  ["Старший лейтенант", 92300, "star", 3], ["Капітан", 109200, "star", 4], ["Майор", 127600, "big", 1], ["Підполковник", 147500, "big", 2],
+  ["Полковник", 168900, "big", 3], ["Бригадний генерал", 191800, "gen", 1], ["Генерал-майор", 216300, "gen", 2], ["Генерал-лейтенант", 242300, "gen", 3],
+  ["Генерал", 269900, "gen", 4], ["Генерал армії", 299000, "gen", 5], ["Маршал", 329700, "gen", 6], ["Головний маршал", 361900, "gen", 7],
+].map(([name, xp, ins, n], i) => ({ i, name, xp, ins, n, reward: { coins: 200 + i * 150, crystals: i >= 10 ? 5 + (i - 10) * 3 : 0 } }));
 
 // ---------- ammunition ----------
 // dmg/speed are multipliers of the vehicle's gun; pen > 0 helps through armour, < 0 hurts;
@@ -174,7 +231,7 @@ WOV.AMMO = {
   plane: [
     { id: "mg", name: "Кулі", short: "КУЛ", col: "#ffe29a", dmg: 1, speed: 1, desc: "Звичайні кулі. Безлімітні." },
     { id: "inc", name: "Запальні", short: "ЗАП", col: "#ff7a3a", dmg: 1.15, speed: 1, fire: 7, mod: 1.5, stock: "inc", desc: "+15% шкоди і часто підпалюють ціль." },
-    { id: "rkt", name: "Ракети", short: "РАК", col: "#ffd36a", rocket: true, limit: 6, desc: "Потужний удар по танках і кораблях. 6 ракет на бій, по літаках не влучають." },
+    { id: "rkt", name: "Ракети", short: "РАК", col: "#ffd36a", rocket: true, limit: 6, stock: "rocket", desc: "Потужний удар по танках і кораблях. До 6 ракет на бій, купуються в магазині. По літаках не влучають." },
   ],
   ship: [
     { id: "ap", name: "Бронебійний", short: "ББ", col: "#f0dc9a", dmg: 1, speed: 1, pen: 0, desc: "Основний снаряд головного калібру. Безлімітний." },
@@ -186,47 +243,50 @@ WOV.STOCK = {
   apcr: { name: "Підкаліберні снаряди", kind: "tank", packs: [{ n: 20, coins: 1200 }, { n: 60, coins: 3000 }] },
   inc: { name: "Запальні кулі", kind: "plane", packs: [{ n: 300, coins: 1000 }, { n: 1000, coins: 2800 }] },
   heavy: { name: "Надважкі снаряди", kind: "ship", packs: [{ n: 15, coins: 1400 }, { n: 45, coins: 3500 }] },
+  rocket: { name: "Авіаракети", kind: "plane", packs: [{ n: 12, coins: 1500 }, { n: 36, coins: 3900 }] },
   repair: { name: "Ремкомплект", kind: null, packs: [{ n: 3, coins: 900 }, { n: 10, coins: 2500 }] },
   strike: { name: "Артудар", kind: null, desc: "Раз за бій викликає залп артилерії по найближчому ворогу: 5 вибухів за 2 секунди. Літаків не зачіпає.", packs: [{ n: 3, coins: 1500 }, { n: 10, coins: 4200 }] },
 };
-WOV.START_STOCK = { apcr: 10, inc: 200, heavy: 6, repair: 2, strike: 2 };
+// at the start you only have the unlimited basic ammo: everything else is bought
+WOV.START_STOCK = { apcr: 0, inc: 0, heavy: 0, rocket: 0, repair: 0, strike: 0 };
+WOV.START_WALLET = { coins: 1500, crystals: 10 };
 
 // medals for a single battle: test(s) gets the battle summary
 WOV.MEDALS = [
-  { id: "blood", ico: "🩸", name: "Перша кров", desc: "Перше знищення в бою", coins: 150 },
-  { id: "warrior", ico: "⚔️", name: "Воїн", desc: "Знищ 3 ворогів за бій", coins: 300 },
-  { id: "ace", ico: "🏅", name: "Ас", desc: "Знищ 5 ворогів за бій", coins: 800 },
-  { id: "sniper", ico: "🎯", name: "Снайпер", desc: "Знищ ворога з відстані понад 150 м", coins: 250 },
-  { id: "aa", ico: "✈️", name: "Гроза неба", desc: "Збий 2 літаки за бій", coins: 350 },
-  { id: "wall", ico: "🛡", name: "Залізна стіна", desc: "Витримай шкоди більше за свою міцність і вцілій", coins: 400 },
-  { id: "hair", ico: "😮‍💨", name: "На волосинці", desc: "Перемога, коли в тебе менше 15% міцності", coins: 300 },
-  { id: "courier", ico: "📦", name: "Інтендант", desc: "Підбери 2 ящики з припасами", coins: 200 },
-  { id: "artillery", ico: "💥", name: "Бог війни", desc: "Знищ ворога артударом", coins: 350 },
-  { id: "top", ico: "👑", name: "Герой бою", desc: "Найкращий результат серед усіх у бою", coins: 500 },
-  { id: "capture", ico: "🚩", name: "Загарбник", desc: "Захопи 2 точки за бій", coins: 300 },
-  { id: "lone", ico: "🐺", name: "Вовк-одинак", desc: "Перемога, коли з команди вцілів тільки ти", coins: 600 },
+  { id: "blood", ico: "🩸", name: "Перша кров", desc: "Перше знищення в бою", coins: 90 },
+  { id: "warrior", ico: "⚔️", name: "Воїн", desc: "Знищ 3 ворогів за бій", coins: 180 },
+  { id: "ace", ico: "🏅", name: "Ас", desc: "Знищ 5 ворогів за бій", coins: 480 },
+  { id: "sniper", ico: "🎯", name: "Снайпер", desc: "Знищ ворога з відстані понад 150 м", coins: 150 },
+  { id: "aa", ico: "✈️", name: "Гроза неба", desc: "Збий 2 літаки за бій", coins: 210 },
+  { id: "wall", ico: "🛡", name: "Залізна стіна", desc: "Витримай шкоди більше за свою міцність і вцілій", coins: 240 },
+  { id: "hair", ico: "😮‍💨", name: "На волосинці", desc: "Перемога, коли в тебе менше 15% міцності", coins: 180 },
+  { id: "courier", ico: "📦", name: "Інтендант", desc: "Підбери 2 ящики з припасами", coins: 120 },
+  { id: "artillery", ico: "💥", name: "Бог війни", desc: "Знищ ворога артударом", coins: 210 },
+  { id: "top", ico: "👑", name: "Герой бою", desc: "Найкращий результат серед усіх у бою", coins: 300 },
+  { id: "capture", ico: "🚩", name: "Загарбник", desc: "Захопи 2 точки за бій", coins: 180 },
+  { id: "lone", ico: "🐺", name: "Вовк-одинак", desc: "Перемога, коли з команди вцілів тільки ти", coins: 360 },
 ];
 // vehicle mastery for one battle score (damage relative to own health, kills, win, survival)
 WOV.MASTERY = [
-  { lvl: 1, name: "III ступінь", short: "III", score: 80, crystals: 5, col: "#9fb3a0" },
-  { lvl: 2, name: "II ступінь", short: "II", score: 140, crystals: 10, col: "#7fbf6b" },
-  { lvl: 3, name: "I ступінь", short: "I", score: 220, crystals: 20, col: "#6fc3f0" },
-  { lvl: 4, name: "Майстер", short: "М", score: 320, crystals: 40, col: "#f3cf7a" },
+  { lvl: 1, name: "III ступінь", short: "III", score: 80, crystals: 2, col: "#9fb3a0" },
+  { lvl: 2, name: "II ступінь", short: "II", score: 140, crystals: 4, col: "#7fbf6b" },
+  { lvl: 3, name: "I ступінь", short: "I", score: 220, crystals: 8, col: "#6fc3f0" },
+  { lvl: 4, name: "Майстер", short: "М", score: 320, crystals: 15, col: "#f3cf7a" },
 ];
 // 7-day login calendar
 WOV.LOGIN_REWARDS = [
-  { coins: 500 }, { stock: "repair", n: 3 }, { coins: 1200 }, { crystals: 10 }, { stock: "strike", n: 3 }, { coins: 2500 }, { crystals: 40, box: "gold" },
+  { coins: 300 }, { stock: "repair", n: 2 }, { coins: 700 }, { crystals: 5 }, { stock: "strike", n: 2 }, { coins: 1500 }, { crystals: 20, box: "iron" },
 ];
 WOV.WEATHER = [
   { id: "day", name: "Ясний день", w: 4 }, { id: "evening", name: "Вечір", w: 2 }, { id: "rain", name: "Злива", w: 2 }, { id: "fog", name: "Туман", w: 1 }, { id: "night", name: "Ніч", w: 1 },
 ];
-WOV.DAILY_GIFT = { hours: 20, coins: [300, 900], crystalsChance: 0.35, crystals: [3, 10] };
-WOV.FRIEND_BONUS = 1500; WOV.REF_BONUS = 3000; WOV.MAX_FRIEND_REWARDS = 10;
+WOV.DAILY_GIFT = { hours: 20, coins: [150, 450], crystalsChance: 0.2, crystals: [1, 5] };
+WOV.FRIEND_BONUS = 1000; WOV.REF_BONUS = 2000; WOV.MAX_FRIEND_REWARDS = 10;
 
 WOV.MODES = {
-  quick: { name: "Швидкий бій", desc: "4 на 4 · 3 хв · мала карта · ×0.6 монет", size: 2800, team: 4, time: 180, winBonus: 400, coinMul: 0.6 },
-  conquest: { name: "Захоплення", desc: "5 на 5 · 3 точки · 6 хв · ×0.85 монет", size: 3400, team: 5, time: 360, winBonus: 900, coinMul: 0.85, points: true, tickets: 300 },
-  assault: { name: "Штурм", desc: "6 атакують, 4 захищають базу · 6 хв · без літаків", size: 3200, team: 6, time: 360, winBonus: 1000, coinMul: 0.9, assault: true },
-  team: { name: "Командний бій", desc: "7 на 7 · 5 хв · велика карта · ×1 монет", size: 4000, team: 7, time: 300, winBonus: 1200, coinMul: 1 },
+  quick: { name: "Швидкий бій", desc: "4 на 4 · 3 хв · мала карта · ×0.6 монет", size: 2800, team: 4, time: 180, winBonus: 200, coinMul: 0.6 },
+  conquest: { name: "Захоплення", desc: "5 на 5 · 3 точки · 6 хв · ×0.85 монет", size: 3400, team: 5, time: 360, winBonus: 450, coinMul: 0.85, points: true, tickets: 300 },
+  assault: { name: "Штурм", desc: "6 атакують, 4 захищають базу · 6 хв · без літаків", size: 3200, team: 6, time: 360, winBonus: 500, coinMul: 0.9, assault: true },
+  team: { name: "Командний бій", desc: "7 на 7 · 5 хв · велика карта · ×1 монет", size: 4000, team: 7, time: 300, winBonus: 600, coinMul: 1 },
 };
 })();

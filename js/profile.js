@@ -25,7 +25,7 @@ function fresh() {
   return {
     v: 3, code: u ? "T" + u.id.toString(36).toUpperCase() : randomCode(),
     name: u ? (u.first_name || u.username || "Командир") : "Командир",
-    coins: 3000, crystals: 20,
+    coins: WOV.START_WALLET.coins, crystals: WOV.START_WALLET.crystals,
     owned: WOV.STARTERS.slice(), cls: "tank", sel: { tank: "t26", plane: "i16", ship: "g5" },
     camos: ["base"], camoSel: {}, boost: 0,
     friends: [], friendRewards: 0, refUsed: false,
@@ -33,7 +33,7 @@ function fresh() {
     ammo: Object.assign({}, WOV.START_STOCK), ammoSel: { tank: "ap", plane: "mg", ship: "ap" }, giftAt: 0, dealDay: "",
     rp: {}, resTarget: { tank: null, plane: null, ship: null }, vmods: {}, vbattles: {}, crew: { tank: {}, plane: {}, ship: {} },
     daily: { day: "", list: [] }, pass: { xp: 0, claimed: [] },
-    medals: {}, mastery: {}, login: { day: "", streak: 0, claimed: "" }, miniPos: null, miniBig: false,
+    medals: {}, mastery: {}, login: { day: "", streak: 0, claimed: "" }, miniPos: null, miniBig: false, orient: "auto", notify: false, notifyAsked: false,
   };
 }
 WOV.profile = fresh();
@@ -119,11 +119,12 @@ WOV.rankIcon = function (r, size) {
   size = size || 30; const n = r.n, c = r.ins === "gen" ? "#3a2a08" : "#1d1a10";
   let g = "";
   if (r.ins === "bar") { if (!n) g = '<circle cx="12" cy="12" r="2.5" fill="' + c + '"/>'; for (let k = 0; k < n; k++) g += '<rect x="5" y="' + (10 - (n - 1) * 2.5 + k * 5) + '" width="14" height="3" rx="1" fill="' + c + '"/>'; }
-  else if (r.ins === "chev") { for (let k = 0; k < n; k++) { const y = 6 + k * (12 / Math.max(1, n)) + (n === 1 ? 4 : 0); g += '<path d="M5 ' + (y + 4) + 'L12 ' + y + 'L19 ' + (y + 4) + '" fill="none" stroke="' + c + '" stroke-width="2.2" stroke-linejoin="round"/>'; } }
+  else if (r.ins === "chev") { for (let k = 0; k < n; k++) { const y = 6 + k * (12 / Math.max(1, n)) + (n === 1 ? 4 : 0); g += '<path d="M5 ' + (y + 4) + 'L12 ' + y + 'L19 ' + (y + 4) + '" fill="none" stroke="' + c + '" stroke-width="' + (n >= 5 ? 1.5 : 2.2) + '" stroke-linejoin="round"/>'; } }
   else {
-    const big = r.ins !== "star", rad = big ? 3.6 : 2.6, pos = { 1: [[12, 12]], 2: [[12, 7.5], [12, 16.5]], 3: [[12, 6], [8, 15], [16, 15]], 4: [[12, 5], [12, 12], [8, 18], [16, 18]] }[n];
+    const big = r.ins !== "star", rad = big ? 3.6 : 2.6, pos = { 1: [[12, 12]], 2: [[12, 7.5], [12, 16.5]], 3: [[12, 6], [8, 15], [16, 15]], 4: [[12, 5], [12, 12], [8, 18], [16, 18]], 5: [[12, 4], [7, 10], [17, 10], [8, 18], [16, 18]], 6: [[8, 5], [16, 5], [6, 12], [18, 12], [8, 19], [16, 19]], 7: [[12, 12], [8, 5], [16, 5], [5, 12], [19, 12], [8, 19], [16, 19]] }[n];
+    const rad2 = n >= 5 ? rad * 0.78 : rad;
     const star = (x, y, R) => { let d = ""; for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? R * 0.45 : R; d += (k ? "L" : "M") + (x + Math.cos(a) * rr).toFixed(2) + " " + (y + Math.sin(a) * rr).toFixed(2); } return '<path d="' + d + 'Z" fill="' + c + '"/>'; };
-    for (const [x, y] of pos) g += star(x, y, rad);
+    for (const [x, y] of pos) g += star(x, y, rad2);
     if (r.ins === "gen") g = '<path d="M3 21c3-1 5-3 6-6M21 21c-3-1-5-3-6-6" stroke="' + c + '" stroke-width="1.2" fill="none" opacity=".6"/>' + g;
   }
   return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '">' + g + "</svg>";
@@ -143,9 +144,9 @@ WOV.openBox = function (box) {
     if (notOwned.length) { const c = notOwned[Math.floor(Math.random() * notOwned.length)]; p.camos.push(c.id); out.push({ type: "camo", id: c.id, label: c.name }); }
   }
   if (Math.random() < box.prem) {
-    const prem = WOV.VEHICLES.filter(v => v.prem && !p.owned.includes(v.id));
+    const prem = WOV.VEHICLES.filter(v => v.prem && !v.stars && !p.owned.includes(v.id));
     if (prem.length) { const v = prem[Math.floor(Math.random() * prem.length)]; p.owned.push(v.id); out.push({ type: "vehicle", id: v.id, label: v.name }); }
-    else { const extra = r(80, 200); p.crystals += extra; out.push({ type: "crystals", amount: extra, note: "замість дубліката" }); }
+    else { const extra = r(40, 100); p.crystals += extra; out.push({ type: "crystals", amount: extra, note: "замість дубліката" }); }
   }
   if (Math.random() < box.boost) { p.boost += 3; out.push({ type: "boost", amount: 3 }); }
   if (box.ammo) {

@@ -1,9 +1,13 @@
 # Supabase settings for War of Victor (used by the GitHub Actions deploy)
 project_id = "war-of-victor"
 
-# Both functions check Telegram signatures themselves, so Supabase JWT checks are off
+# The functions check Telegram signatures themselves, so Supabase JWT checks are off
 [functions.api]
 verify_jwt = false
 
 [functions.tg-webhook]
+verify_jwt = false
+
+# checks its own secret header derived from the bot token
+[functions.remind]
 verify_jwt = false

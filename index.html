@@ -27,8 +27,7 @@
       <div class="pinfo"><b id="pname">Командир</b><div class="lvl"><span id="plvl">Рів. 1</span><i><em id="pxp"></em></i></div></div>
     </div>
     <div class="wallet">
-      <button class="snd" id="sndBtn" aria-label="Звуки" data-ico="sound"></button>
-      <button class="snd" id="musBtn" aria-label="Музика" data-ico="music"></button>
+      <button class="snd" id="setBtn" aria-label="Налаштування" data-ico="gear"></button>
       <div class="pill coins"><span class="ico" data-ico="coin"></span><b id="coins">0</b></div>
       <div class="pill crystals"><span class="ico" data-ico="crystal"></span><b id="crystals">0</b></div>
     </div>
@@ -37,7 +36,7 @@
   <main id="screens">
     <!-- HANGAR -->
     <section id="scr-hangar" class="screen active">
-      <div class="seg" id="hangarCls"></div>
+      <div class="seg branch" id="hangarCls"></div>
       <div class="stage">
         <div class="platform"></div>
         <canvas id="hangarCanvas"></canvas>
@@ -52,15 +51,11 @@
       <div class="ammo-desc" id="hAmmoDesc"></div>
       <div class="row-title">Камуфляж</div>
       <div class="camos" id="hCamos"></div>
-      <div class="battle-box">
-        <div class="modes" id="modes"></div>
-        <button class="btn-battle" id="toBattle"><span>В БІЙ</span><small id="boostInfo"></small></button>
-      </div>
     </section>
 
     <!-- TECH TREE -->
     <section id="scr-tree" class="screen">
-      <div class="screen-title">Дослідження техніки</div>
+      <div class="screen-title"><button class="back" id="treeBack" aria-label="Назад">‹</button>Гілка техніки</div>
       <div class="seg" id="treeCls"></div>
       <div class="chips" id="treeNat" style="margin-top:8px"></div>
       <div class="note" id="treeHint"></div>
@@ -113,8 +108,8 @@
 
   <nav class="tabbar" id="tabbar">
     <button data-tab="hangar" class="active"><span data-ico="hangar"></span>Ангар</button>
-    <button data-tab="tree"><span data-ico="tree"></span>Техніка</button>
     <button data-tab="shop"><span data-ico="shop"></span>Магазин</button>
+    <button data-tab="battle" class="battle-tab"><span data-ico="swords"></span>Бій</button>
     <button data-tab="tasks"><span data-ico="tasks"></span>Завдання<i class="dot hidden" id="tasksDot"></i></button>
     <button data-tab="friends"><span data-ico="friends"></span>Друзі</button>
   </nav>

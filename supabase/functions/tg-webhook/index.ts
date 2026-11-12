@@ -19,6 +19,13 @@ Deno.serve(async req => {
     return new Response("ok");
   }
 
+  // the player blocked or unblocked the bot
+  if (u.my_chat_member && u.my_chat_member.chat.type === "private") {
+    const st = u.my_chat_member.new_chat_member.status;
+    await db.from("players").update({ notify: st === "member" }).eq("tg_id", u.my_chat_member.from.id);
+    return new Response("ok");
+  }
+
   const m = u.message;
   if (m && m.successful_payment) {
     const sp = m.successful_payment;
@@ -35,8 +42,16 @@ Deno.serve(async req => {
   if (m && typeof m.text === "string") {
     const cmd = m.text.split(/[\s@]/)[0];
     if (cmd === "/start") {
+      // writing /start means the bot may send reminders; /stop turns them off
+      const name = String(m.from.first_name || m.from.username || "Командир").replace(/[\u0000-\u001f<>]/g, "").slice(0, 24);
+      const { data: row } = await db.from("players").select("tg_id").eq("tg_id", m.from.id).maybeSingle();
+      if (row) await db.from("players").update({ notify: true }).eq("tg_id", m.from.id);
+      else await db.from("players").insert({ tg_id: m.from.id, name, notify: true });
       const kb = GAME_URL ? { reply_markup: { inline_keyboard: [[{ text: "⚔️ ВОЮВАТИ", web_app: { url: GAME_URL } }]] } } : {};
       await bot("sendMessage", { chat_id: m.chat.id, text: "War of Victor: танки, літаки й кораблі в одному бою. Тисни кнопку і вперед!", ...kb });
+    } else if (cmd === "/stop") {
+      await db.from("players").update({ notify: false }).eq("tg_id", m.from.id);
+      await bot("sendMessage", { chat_id: m.chat.id, text: "Добре, нагадувань більше не буде. Повернути їх: /start" });
     } else if (cmd === "/paysupport") {
       await bot("sendMessage", { chat_id: m.chat.id, text: "Питання щодо оплати зірками? Опиши проблему одним повідомленням тут, і ми відповімо." });
     }

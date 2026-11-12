@@ -14,6 +14,19 @@ input { font: inherit; }
 
 #game { position: fixed; inset: 0; width: 100%; height: 100%; display: none; touch-action: none; z-index: 1; }
 #battleUi { position: fixed; z-index: 2; left: 10px; top: calc(10px + var(--safe-top)); }
+/* battle turned by 90° (orientation setting): the script sets size and transform */
+#game.rot { inset: auto; left: 0; top: 0; transform-origin: 0 0; }
+#battleUi.rot { left: 0; top: 0; padding: 10px; box-sizing: border-box; transform-origin: 0 0; pointer-events: none; }
+#battleUi.rot > * { pointer-events: auto; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.set-row:last-child { border-bottom: 0; }
+.set-row > div { min-width: 0; }
+.set-row small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.set-row .seg { margin: 0; flex: none; }
+.toggle { width: 48px; height: 28px; border-radius: 14px; background: rgba(255,255,255,.12); position: relative; flex: none; border: 1px solid var(--line); padding: 0; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--muted); transition: transform .15s; }
+.toggle.on { background: rgba(127,191,107,.35); }
+.toggle.on::after { transform: translateX(20px); background: var(--good); }
 .icon-btn { width: 36px; height: 34px; border-radius: 10px; background: rgba(10,14,13,.6); color: var(--ink); font-size: 16px; font-weight: 700; }
 
 /* ---------- app shell ---------- */
@@ -342,3 +355,16 @@ input { font: inherit; }
 .cday { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 2px; text-align: center; min-width: 0; }
 .cday small { display: block; color: var(--muted); font-size: 9px; } .cday b { display: block; font-size: 11px; margin-top: 3px; word-break: break-word; }
 .cday.now { border-color: var(--accent); background: rgba(224,172,69,.14); } .cday.got { opacity: .55; } .cday.got b::after { content: " ✓"; color: var(--good); }
+
+/* bottom battle button and branch chips */
+.tabbar .battle-tab { flex: 1.15; color: #1d1a12; }
+.tabbar .battle-tab span { display: grid; place-items: center; width: 54px; height: 54px; margin-top: -22px; border-radius: 50%; background: linear-gradient(160deg, var(--accent2), var(--accent)); box-shadow: 0 4px 14px rgba(224,172,69,.35), 0 0 0 4px rgba(14,18,17,.92); color: #1d1a12; }
+.tabbar .battle-tab span svg { width: 28px; height: 28px; }
+.tabbar .battle-tab { color: var(--accent); font-weight: 800; }
+.seg.branch button .arr { opacity: .6; margin-left: 2px; }
+.screen-title .back { font-size: 26px; line-height: 1; padding: 0 10px 0 0; color: var(--accent); vertical-align: -2px; }
+.mode.off { opacity: .4; }
+#sheet .btn-battle { margin-top: 12px; }
+.set-row .seg { width: 100%; }
+.set-row .seg button { padding: 8px 6px; }
+.set-row .seg button.active { background: var(--accent); color: #1d1a12; }

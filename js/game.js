@@ -14,12 +14,30 @@ const TEAM_COL = ["#d9a441", "#e0604a"];
 
 const cv = document.getElementById("game"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1, lowFx = false;
+// orientation setting: "auto" follows the phone; "landscape"/"portrait" turn the battle picture by 90° when the phone is held the other way
+let ROT = false;
+let B = null; // current battle
+function wantRotate() {
+  const o = WOV.profile && WOV.profile.orient, tall = window.innerHeight > window.innerWidth;
+  return !!B && ((o === "landscape" && tall) || (o === "portrait" && !tall));
+}
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, lowFx ? 1 : 1.5);
-  W = window.innerWidth; H = window.innerHeight;
+  const sw = window.innerWidth, sh = window.innerHeight;
+  ROT = wantRotate();
+  W = ROT ? sh : sw; H = ROT ? sw : sh;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const ui = document.getElementById("battleUi");
+  for (const el of [cv, ui]) {
+    if (!el) continue;
+    el.classList.toggle("rot", ROT);
+    el.style.width = ROT ? sh + "px" : ""; el.style.height = ROT ? sw + "px" : "";
+    el.style.transform = ROT ? "translateX(" + sw + "px) rotate(90deg)" : "";
+  }
 }
+// screen point -> point on the (possibly turned) battle picture
+const pt = (x, y) => (ROT ? { x: y, y: window.innerWidth - x } : { x, y });
 window.addEventListener("resize", resize); resize();
 if (WOV.tg) WOV.tg.onEvent("viewportChanged", resize);
 
@@ -37,7 +55,7 @@ window.addEventListener("keyup", e => { keys[e.code] = false; });
 const mouse = { x: 0, y: 0, down: false, active: false };
 // the minimap can be dragged anywhere; a tap without moving toggles its size
 const miniDrag = { id: null, ox: 0, oy: 0, sx: 0, sy: 0, moved: false };
-function hudTop() { const tg = WOV.tg; return 10 + ((tg && tg.safeAreaInset && tg.safeAreaInset.top) || 0) + ((tg && tg.contentSafeAreaInset && tg.contentSafeAreaInset.top) || 0); }
+function hudTop() { const tg = WOV.tg; if (ROT) return 10; return 10 + ((tg && tg.safeAreaInset && tg.safeAreaInset.top) || 0) + ((tg && tg.contentSafeAreaInset && tg.contentSafeAreaInset.top) || 0); }
 function miniRect() {
   const prof = WOV.profile, ms = prof.miniBig ? Math.min(210, W * 0.52, H * 0.4) : Math.min(110, W * 0.28);
   let x = W - ms - 10, y = hudTop() + 42;
@@ -58,8 +76,8 @@ function miniEnd() {
   if (!miniDrag.moved) { const r = miniRect(), cx = r.x + r.s / 2, cy = r.y + r.s / 2; prof.miniBig = !prof.miniBig; const n = miniRect(); if (prof.miniPos) prof.miniPos = { x: (cx - n.s / 2) / W, y: (cy - n.s / 2) / H }; WOV.haptic("select"); }
   miniDrag.id = null; WOV.save();
 }
-cv.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; if (miniDrag.id === "m") miniMove(e.clientX, e.clientY); });
-cv.addEventListener("mousedown", e => { mouse.active = true; if (B && pressButton(e.clientX, e.clientY, null)) return; if (miniStart(e.clientX, e.clientY, "m")) return; mouse.down = true; });
+cv.addEventListener("mousemove", e => { const q = pt(e.clientX, e.clientY); mouse.x = q.x; mouse.y = q.y; mouse.active = true; if (miniDrag.id === "m") miniMove(q.x, q.y); });
+cv.addEventListener("mousedown", e => { const q = pt(e.clientX, e.clientY); mouse.active = true; if (B && pressButton(q.x, q.y, null)) return; if (miniStart(q.x, q.y, "m")) return; mouse.down = true; });
 window.addEventListener("mouseup", () => { mouse.down = false; if (miniDrag.id === "m") miniEnd(); });
 const sticks = { L: { id: null, ox: 0, oy: 0, dx: 0, dy: 0 }, R: { id: null, ox: 0, oy: 0, dx: 0, dy: 0 } };
 const STICK_R = 60;
@@ -68,16 +86,18 @@ let usingTouch = !!((window.matchMedia && matchMedia("(pointer: coarse)").matche
 cv.addEventListener("touchstart", e => {
   e.preventDefault(); usingTouch = true; mouse.active = false;
   for (const t of e.changedTouches) {
-    if (B && pressButton(t.clientX, t.clientY, t.identifier)) continue;
-    if (miniDrag.id === null && miniStart(t.clientX, t.clientY, t.identifier)) continue;
-    const s = t.clientX < W / 2 ? sticks.L : sticks.R; if (s.id !== null) continue; s.id = t.identifier; s.ox = t.clientX; s.oy = t.clientY; s.dx = s.dy = 0;
+    const q = pt(t.clientX, t.clientY);
+    if (B && pressButton(q.x, q.y, t.identifier)) continue;
+    if (miniDrag.id === null && miniStart(q.x, q.y, t.identifier)) continue;
+    const s = q.x < W / 2 ? sticks.L : sticks.R; if (s.id !== null) continue; s.id = t.identifier; s.ox = q.x; s.oy = q.y; s.dx = s.dy = 0;
   }
 }, { passive: false });
 cv.addEventListener("touchmove", e => {
   e.preventDefault();
-  for (const t of e.changedTouches) if (miniDrag.id === t.identifier) miniMove(t.clientX, t.clientY);
+  for (const t of e.changedTouches) if (miniDrag.id === t.identifier) { const q = pt(t.clientX, t.clientY); miniMove(q.x, q.y); }
   for (const t of e.changedTouches) for (const s of [sticks.L, sticks.R]) if (s.id === t.identifier) {
-    let dx = t.clientX - s.ox, dy = t.clientY - s.oy; const d = Math.hypot(dx, dy);
+    const q = pt(t.clientX, t.clientY);
+    let dx = q.x - s.ox, dy = q.y - s.oy; const d = Math.hypot(dx, dy);
     if (d > STICK_R) { dx *= STICK_R / d; dy *= STICK_R / d; }
     s.dx = dx / STICK_R; s.dy = dy / STICK_R;
   }
@@ -85,7 +105,7 @@ cv.addEventListener("touchmove", e => {
 const endTouch = e => { e.preventDefault(); for (const t of e.changedTouches) { if (miniDrag.id === t.identifier) miniEnd(); if (fireBtn.id === t.identifier) fireBtn.id = null; for (const s of [sticks.L, sticks.R]) if (s.id === t.identifier) { s.id = null; s.dx = s.dy = 0; } } };
 
 // on-screen buttons: fire (touch), ammo types and repair kit, arranged around the bottom-right corner
-function safeBottom() { const tg = WOV.tg; return (tg && tg.safeAreaInset && tg.safeAreaInset.bottom) || 0; }
+function safeBottom() { const tg = WOV.tg; if (ROT) return 0; return (tg && tg.safeAreaInset && tg.safeAreaInset.bottom) || 0; }
 function controls() {
   const p = B.player, fx = W - (usingTouch ? 76 : 56), fy = H - (usingTouch ? 96 : 56) - safeBottom(), R = usingTouch ? 90 : 78, list = [];
   if (usingTouch) list.push({ k: "fire", x: fx, y: fy, r: 44 });
@@ -110,7 +130,6 @@ cv.addEventListener("touchend", endTouch, { passive: false });
 cv.addEventListener("touchcancel", endTouch, { passive: false });
 
 // ---------- battle state ----------
-let B = null; // current battle
 // a battle also ends early when nobody has dealt damage for 30 s (e.g. last tank vs last ship far apart)
 let last = 0, raf = 0;
 const perf = { n: 0, acc: 0 };
@@ -123,50 +142,65 @@ function makeUnit(v, team, pos, name, isPlayer, camo) {
 }
 
 // fair matchmaking: mostly the player's own tier, sometimes one lower, rarely one higher; both teams get the same tiers
-function slotTier(tier) { const r = Math.random(); return clamp(r < 0.8 ? tier : r < 0.95 ? tier - 1 : tier + 1, 1, 7); }
+function slotTier(tier) { const r = Math.random(); return clamp(r < 0.8 ? tier : r < 0.95 ? tier - 1 : tier + 1, 1, WOV.MAX_TIER); }
 function pickBotVehicle(kind, tier) {
-  const t = clamp(tier, 1, 7);
+  const t = clamp(tier, 1, WOV.MAX_TIER);
   const pool = WOV.VEHICLES.filter(v => v.kind === kind && v.tier === t && !v.prem);
   return pick(pool.length ? pool : WOV.VEHICLES.filter(v => v.kind === kind && v.tier === 1));
 }
 
 // ---------- online: roster built identically on every client from the match seed ----------
 function seeded(seed) { let s = seed >>> 0 || 7; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
+const kindsFor = n => (n <= 4 ? ["tank", "tank", "plane", "ship"] : n === 5 ? ["tank", "tank", "tank", "plane", "ship"] : ["tank", "tank", "tank", "plane", "plane", "ship", "ship"]);
+// every client builds the same roster: all randomness while building comes from the match seed
 function buildOnline(mode, match) {
   const R = seeded(match.seed ^ 0x5bd1e995), map = WOV.generateMap(mode.size, match.seed), me = WOV.Net.myId, prof = WOV.profile;
-  const players = match.players.slice();
-  for (let i = players.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [players[i], players[j]] = [players[j], players[i]]; }
-  const teams = [[], []]; players.forEach((pl, i) => teams[i % 2].push(pl));
-  const tiers = players.map(pl => (WOV.byId[pl.vid] || {}).tier || 1), avg = Math.round(tiers.reduce((a, b) => a + b, 0) / tiers.length);
-  const sTier = () => { const r = R(); return clamp(r < 0.8 ? avg : r < 0.95 ? avg - 1 : avg + 1, 1, 7); };
-  const names = CALLSIGNS.slice(); const units = [];
-  let myTeam = 0;
-  for (let team = 0; team < 2; team++) {
-    const slots = ["tank", "tank", "plane", "ship"];
-    const list = teams[team].map(pl => { const v = WOV.byId[pl.vid] || WOV.byId["t26"]; const i = slots.indexOf(v.kind); slots.splice(i >= 0 ? i : slots.length - 1, 1); return { pl, v }; });
-    for (const k of slots.slice(0, mode.team - list.length)) {
-      const t = sTier(), pool = WOV.VEHICLES.filter(v => v.kind === k && v.tier === t && !v.prem);
-      list.push({ pl: null, v: pool[Math.floor(R() * pool.length)] || WOV.VEHICLES.find(v => v.kind === k) });
+  const rand0 = Math.random; Math.random = R;
+  try {
+    const players = match.players.slice();
+    for (let i = players.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [players[i], players[j]] = [players[j], players[i]]; }
+    const L = mode.assault ? assaultLayout(map, R() < 0.5 ? 0 : 1) : null;
+    const comp = t => (L ? L.comp(t) : kindsFor(mode.team));
+    const teams = [[], []];
+    players.forEach((pl, i) => { let t = i % 2; if (teams[t].length >= comp(t).length) t ^= 1; teams[t].push(pl); });
+    const tiers = players.map(pl => (WOV.byId[pl.vid] || {}).tier || 1), avg = Math.round(tiers.reduce((a, b) => a + b, 0) / tiers.length);
+    const sTier = () => { const r = R(); return clamp(r < 0.8 ? avg : r < 0.95 ? avg - 1 : avg + 1, 1, WOV.MAX_TIER); };
+    const names = CALLSIGNS.slice(); const units = [];
+    let myTeam = 0;
+    for (let team = 0; team < 2; team++) {
+      const slots = comp(team);
+      const list = teams[team].map(pl => { const v = WOV.byId[pl.vid] || WOV.byId["t26"]; const i = slots.indexOf(v.kind); slots.splice(i >= 0 ? i : slots.length - 1, 1); return { pl, v }; });
+      for (const k of slots) {
+        const t = sTier(), pool = WOV.VEHICLES.filter(v => v.kind === k && v.tier === t && !v.prem);
+        list.push({ pl: null, v: pool[Math.floor(R() * pool.length)] || WOV.VEHICLES.find(v => v.kind === k) });
+      }
+      for (const { pl, v } of list) {
+        const pos = (L ? L.spot(v.kind, team, v.r) : map.findSpot(v.kind, team, v.r)) || { x: team ? map.size * 0.9 : map.size * 0.1, y: map.size * (0.3 + R() * 0.4) };
+        const name = pl ? pl.name : names.splice(Math.floor(R() * names.length), 1)[0] || "Bot";
+        const mine = pl && pl.id === me;
+        if (mine) myTeam = team;
+        const camo = pl ? (WOV.CAMOS.find(c => c.id === pl.camo) || null) : null;
+        const u = makeUnit(mine ? (WOV.battleStats ? WOV.battleStats(WOV.currentVehicle()) : v) : v, team, pos, mine ? prof.name : name, !!mine, mine ? WOV.camoOf(WOV.currentVehicle()) : camo);
+        u.owner = pl ? pl.id : null; u.human = !!pl;
+        units.push(u);
+      }
     }
-    for (const { pl, v } of list) {
-      const pos = map.findSpot(v.kind, team, v.r) || { x: team ? map.size * 0.9 : map.size * 0.1, y: map.size * (0.3 + R() * 0.4) };
-      const name = pl ? pl.name : names.splice(Math.floor(R() * names.length), 1)[0] || "Bot";
-      const mine = pl && pl.id === me;
-      if (mine) myTeam = team;
-      const camo = pl ? (WOV.CAMOS.find(c => c.id === pl.camo) || null) : null;
-      const u = makeUnit(mine ? (WOV.battleStats ? WOV.battleStats(WOV.currentVehicle()) : v) : v, team, pos, mine ? prof.name : name, !!mine, mine ? WOV.camoOf(WOV.currentVehicle()) : camo);
-      u.nid = units.length; u.owner = pl ? pl.id : null; u.human = !!pl;
-      units.push(u);
+    if (L) addBunkers(units, L, avg);
+    units.forEach((u, i) => (u.nid = i));
+    // the local view always shows my team as team 0
+    if (myTeam) {
+      for (const u of units) { u.team ^= 1; if (!u.fixed) u.angle = u.tAngle = u.team === 0 ? 0 : Math.PI; }
+      map.spawnZones = [map.spawnZones[1], map.spawnZones[0]];
     }
-  }
-  // the local view always shows my team as team 0
-  if (myTeam) { for (const u of units) { u.team ^= 1; u.angle = u.tAngle = u.team === 0 ? 0 : Math.PI; } map.spawnZones = [map.spawnZones[1], map.spawnZones[0]]; }
-  return { map, units, myTeam };
+    const assault = L ? { units, base: L.base, forts: L.forts, attT: L.attT ^ myTeam } : null;
+    return { map, units, myTeam, assault };
+  } finally { Math.random = rand0; }
 }
 
 // ---------- assault: defenders hold a fortified base, attackers must capture it ----------
-function buildAssault(mode, map, pv, prof) {
-  const attT = WOV._forceAtt !== undefined ? WOV._forceAtt : Math.random() < 0.5 ? 0 : 1, defT = 1 - attT, S = map.size;
+const ASSAULT_COMP = { att: ["tank", "tank", "tank", "tank", "ship", "ship"], def: ["tank", "tank", "tank", "ship"] };
+function assaultLayout(map, attT) {
+  const defT = 1 - attT, S = map.size;
   const base0 = map.findSpot("tank", defT, 110) || { x: map.spawnZones[defT], y: S / 2 };
   const base = { x: base0.x, y: base0.y, r: 190 };
   const toAtt = map.spawnZones[attT] > base.x ? 0 : Math.PI;
@@ -177,27 +211,34 @@ function buildAssault(mode, map, pv, prof) {
     const sand = i % 3 !== 1;
     forts.push({ x, y, r: sand ? 15 : 17, sand, hp: sand ? 260 : 99999, a });
   }
-  const names = CALLSIGNS.slice().sort(() => Math.random() - 0.5), units = [];
-  const comp = t => t === attT ? ["tank", "tank", "tank", "tank", "ship", "ship"] : ["tank", "tank", "tank", "ship"];
   const nearBase = (kind, r) => {
     if (kind === "ship") return map.findSpot("ship", defT, r);
     for (let i = 0; i < 120; i++) { const a = rnd(0, TAU), d = rnd(40, base.r * 0.7), x = base.x + Math.cos(a) * d, y = base.y + Math.sin(a) * d; if (map.passable("tank", x, y, r + 6, toAtt) && !forts.some(f => Math.hypot(f.x - x, f.y - y) < f.r + r + 6)) return { x, y }; }
     return map.findSpot(kind, defT, r);
   };
   const spot = (kind, team, r) => team === defT ? nearBase(kind, r) : map.findSpot(kind, team, r);
-  for (let team = 0; team < 2; team++) {
-    const list = comp(team);
-    if (team === 0) { list.splice(list.indexOf(pv.kind), 1); const pos = spot(pv.kind, 0, pv.r) || { x: map.spawnZones[0], y: S / 2 }; units.push(makeUnit(WOV.battleStats ? WOV.battleStats(pv) : pv, 0, pos, prof.name, true, WOV.camoOf(pv))); }
-    for (const k of list) { const v = pickBotVehicle(k, slotTier(pv.tier)), pos = spot(k, team, v.r); if (pos) units.push(makeUnit(v, team, pos, names.pop() || "Bot", false, null)); }
-  }
-  // two bunkers covering the approach
-  const bv = pickBotVehicle("tank", pv.tier);
+  return { base, forts, toAtt, attT, defT, spot, comp: t => (t === attT ? ASSAULT_COMP.att : ASSAULT_COMP.def).slice() };
+}
+// two bunkers covering the approach
+function addBunkers(units, L, tier) {
+  const bv = pickBotVehicle("tank", tier);
   for (const side of [-0.45, 0.45]) {
-    const a = toAtt + side, x = base.x + Math.cos(a) * base.r * 0.5, y = base.y + Math.sin(a) * base.r * 0.5;
+    const a = L.toAtt + side, x = L.base.x + Math.cos(a) * L.base.r * 0.5, y = L.base.y + Math.sin(a) * L.base.r * 0.5;
     const v = Object.assign({}, bv, { id: "dot", name: "ДОТ", hp: Math.round(bv.hp * 2.6), speed: 0, turn: 0, armor: [0.55, 0.65, 0.8], reload: +(bv.reload * 1.35).toFixed(2), dmg: Math.round(bv.dmg * 1.1), r: 18 });
-    const u = makeUnit(v, defT, { x, y }, "ДОТ", false, null); u.fixed = true; u.angle = u.tAngle = toAtt; units.push(u);
+    const u = makeUnit(v, L.defT, { x, y }, "ДОТ", false, null); u.fixed = true; u.angle = u.tAngle = L.toAtt; units.push(u);
   }
-  return { units, base, forts, attT };
+}
+function buildAssault(mode, map, pv, prof) {
+  const attT = WOV._forceAtt !== undefined ? WOV._forceAtt : Math.random() < 0.5 ? 0 : 1, S = map.size;
+  const L = assaultLayout(map, attT);
+  const names = CALLSIGNS.slice().sort(() => Math.random() - 0.5), units = [];
+  for (let team = 0; team < 2; team++) {
+    const list = L.comp(team);
+    if (team === 0) { list.splice(list.indexOf(pv.kind), 1); const pos = L.spot(pv.kind, 0, pv.r) || { x: map.spawnZones[0], y: S / 2 }; units.push(makeUnit(WOV.battleStats ? WOV.battleStats(pv) : pv, 0, pos, prof.name, true, WOV.camoOf(pv))); }
+    for (const k of list) { const v = pickBotVehicle(k, slotTier(pv.tier)), pos = L.spot(k, team, v.r); if (pos) units.push(makeUnit(v, team, pos, names.pop() || "Bot", false, null)); }
+  }
+  addBunkers(units, L, pv.tier);
+  return { units, base: L.base, forts: L.forts, attT };
 }
 function updateFixed(u, dt) {
   let t = null, bd = u.v.shell * u.v.range * 0.8;
@@ -218,7 +259,7 @@ function updateAssault(dt) {
   if (hitNow && b.cap > 0) { b.cap = Math.max(0, b.cap - 0.12); if (b.attT === 1) floatText(bs.x, bs.y - 30, "ЗАХОПЛЕННЯ ЗБИТО", "#d9a441"); }
   b.capping = att > 0 && def === 0;
   if (b.capping) b.cap = Math.min(1, b.cap + dt * Math.min(att, 3) / 60);
-  if (b.cap >= 1 && !b.over) finish(b.attT === 0 ? "win" : "lose");
+  if (b.cap >= 1 && !b.over && (!b.net || isHost())) finish(b.attT === 0 ? "win" : "lose");
 }
 
 function start(modeId, onEnd, match) {
@@ -226,10 +267,10 @@ function start(modeId, onEnd, match) {
   const online = match ? buildOnline(mode, match) : null;
   const map = online ? online.map : WOV.generateMap(mode.size);
   const n = mode.team;
-  const kinds = n <= 4 ? ["tank", "tank", "plane", "ship"] : n === 5 ? ["tank", "tank", "tank", "plane", "ship"] : ["tank", "tank", "tank", "plane", "plane", "ship", "ship"];
+  const kinds = kindsFor(n);
   const names = CALLSIGNS.slice().sort(() => Math.random() - 0.5);
   const friendNames = prof.friends.map(f => f.name).sort(() => Math.random() - 0.5);
-  const assault = mode.assault && !online ? buildAssault(mode, map, pv, prof) : null;
+  const assault = online ? online.assault : mode.assault ? buildAssault(mode, map, pv, prof) : null;
   const units = online ? online.units : assault ? assault.units : [];
   // slot list: the player's slot first (enemy mirror of it gets the player's tier), then the rest with shared tiers
   const rest = kinds.slice(); rest.splice(rest.indexOf(pv.kind), 1);
@@ -255,7 +296,7 @@ function start(modeId, onEnd, match) {
     B.banner.sub = "Онлайн: " + match.players.length + " гравц" + (match.players.length < 5 ? "і" : "ів") + ", решта боти";
   }
   setAmmo(B.player, prof.ammoSel[pv.kind] || "", true);
-  if (mode.points) setupPoints(map, mode);
+  if (mode.points) setupPoints(map, mode, match ? seeded(match.seed ^ 0x77777) : null);
   for (const u of units) if (!u.isPlayer && !u.human && u.kind !== "plane" && Math.random() < (u.kind === "ship" ? 0.35 : 0.25)) u.ammo = "he";
   fireBtn.id = null; sticks.L.id = sticks.R.id = null; sticks.L.dx = sticks.L.dy = sticks.R.dx = sticks.R.dy = 0;
   map.warmup(B.player.x, B.player.y, W, H);
@@ -276,18 +317,20 @@ function start(modeId, onEnd, match) {
   B.strikes = [];
   cv.style.display = "block";
   document.getElementById("battleUi").classList.remove("hidden");
+  resize();
   last = performance.now();
   cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
 }
 
-function stop() { if (B && B.net) B.net.link.close(); if (WOV.Audio) { WOV.Audio.engine(null); WOV.Audio.music("menu"); } B = null; cancelAnimationFrame(raf); cv.style.display = "none"; document.getElementById("battleUi").classList.add("hidden"); }
+function stop() { if (B && B.net) B.net.link.close(); if (WOV.Audio) { WOV.Audio.engine(null); WOV.Audio.music("menu"); } B = null; cancelAnimationFrame(raf); cv.style.display = "none"; document.getElementById("battleUi").classList.add("hidden"); resize(); }
 
 // ---------- ammunition ----------
 const AMMO = WOV.AMMO;
 const ammoDef = u => AMMO[u.kind].find(a => a.id === u.ammo) || AMMO[u.kind][0];
 function ammoLeft(u, a) { // shots left for this ammo type (Infinity = unlimited)
-  if (a.limit) return u.limited[a.id] !== undefined ? u.limited[a.id] : a.limit;
-  if (a.stock && u.isPlayer) return WOV.profile.ammo[a.stock] || 0;
+  const stock = a.stock && u.isPlayer ? WOV.profile.ammo[a.stock] || 0 : Infinity;
+  if (a.limit) return Math.min(stock, u.limited[a.id] !== undefined ? u.limited[a.id] : a.limit);
+  if (a.stock && u.isPlayer) return stock;
   return Infinity;
 }
 function setAmmo(u, id, quiet) {
@@ -298,9 +341,9 @@ function setAmmo(u, id, quiet) {
   if (u.isPlayer && !quiet) { B.ammoNote = { text: "Заряджено: " + a.name, t: 1.4, col: a.col }; WOV.haptic("select"); SFX("click"); }
 }
 function consume(u, a) {
-  if (a.limit) u.limited[a.id] = ammoLeft(u, a) - 1;
-  else if (a.stock && u.isPlayer) WOV.profile.ammo[a.stock] = Math.max(0, (WOV.profile.ammo[a.stock] || 0) - 1);
-  else return;
+  if (!a.limit && !(a.stock && u.isPlayer)) return;
+  if (a.limit) u.limited[a.id] = (u.limited[a.id] !== undefined ? u.limited[a.id] : a.limit) - 1;
+  if (a.stock && u.isPlayer) WOV.profile.ammo[a.stock] = Math.max(0, (WOV.profile.ammo[a.stock] || 0) - 1);
   if (ammoLeft(u, a) <= 0) { u.ammo = AMMO[u.kind][0].id; if (u.isPlayer) B.ammoNote = { text: a.name + " закінчились", t: 2, col: "#e0604a" }; }
 }
 function useRepair(p) {
@@ -507,10 +550,10 @@ function drawWeather() {
 }
 
 // ---------- capture points mode ----------
-function setupPoints(map, mode) {
-  const S = map.size, pts = [], names = ["A", "B", "C"];
+function setupPoints(map, mode, rng) {
+  const rand = rng || Math.random, S = map.size, pts = [], names = ["A", "B", "C"];
   const free = (x, y) => pts.every(q => Math.hypot(q.x - x, q.y - y) > S * 0.2);
-  const tryFind = (test) => { for (let i = 0; i < 400; i++) { const x = S * (0.32 + Math.random() * 0.36), y = S * (0.12 + Math.random() * 0.76); if (free(x, y) && test(x, y)) return { x, y }; } return null; };
+  const tryFind = (test) => { for (let i = 0; i < 400; i++) { const x = S * (0.32 + rand() * 0.36), y = S * (0.12 + rand() * 0.76); if (free(x, y) && test(x, y)) return { x, y }; } return null; };
   const land = (x, y) => map.h(x, y) > 0.06 && map.passable("tank", x, y, 40, 0);
   const sea = (x, y) => map.passable("ship", x, y, 50, 0);
   for (const test of [land, land, sea]) { const q = tryFind(test) || tryFind(land) || tryFind(sea); if (q) pts.push({ x: q.x, y: q.y, r: 120, owner: -1, prog: 0, water: test === sea && !land(q.x, q.y) }); }
@@ -571,7 +614,14 @@ function fire(u, angOverride) {
   const v = u.v, m = WOV.muzzle(u), air = u.kind === "plane", A = ammoDef(u);
   if (A.rocket) return fireRocket(u, A);
   if (!air && B.map.pointInWalls(m.x, m.y)) { u.cd = v.reload * 0.4; return; }
-  const spread = air ? rnd(-0.035, 0.035) : u.isPlayer ? (Math.random() + Math.random() - 1) * (u.aim || 0.02) : rnd(-0.045, 0.045);
+  // machine guns overheat: about 3 s of non-stop fire, then a forced pause until the barrels cool down
+  if (air) {
+    if (u.over > 0) { u.cd = 0.1; return; }
+    u.heat = (u.heat || 0) + HEAT_PER_SHOT; u.hot = 0.18;
+    if (u.heat >= 1) { u.heat = 1; u.over = OVERHEAT_PAUSE; if (u.isPlayer) { B.ammoNote = { text: "Кулемети перегрілись!", t: 1.6, col: "#ff7a3a" }; WOV.haptic("warning"); } }
+  }
+  const spread = air ? rnd(-0.035, 0.035) : u.isPlayer ? (Math.random() + Math.random() - 1) * (u.aim || 0.02)
+    : (Math.random() + Math.random() - 1) * (0.022 + 0.05 * Math.min(1, Math.abs(u.vel) / (v.speed || 1))); // bots: accurate when standing, loose on the move
   const a = (angOverride !== undefined ? angOverride : m.a) + spread;
   const sp = v.shell * (A.speed || 1) + (air ? u.vel : 0);
   B.shells.push({ x: m.x, y: m.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, team: u.team, dmg: v.dmg * (A.dmg || 1), life: v.range / (A.speed || 1), owner: u, air, small: air,
@@ -586,6 +636,11 @@ function fire(u, angOverride) {
     for (let i = 0; i < 3; i++) B.parts.push({ x: m.x, y: m.y, vx: rnd(-20, 20), vy: rnd(-20, 20), life: rnd(0.4, 0.8), max: 0.8, c: "rgba(200,200,190,.5)", s: rnd(5, 9), smoke: true });
     if (u.isPlayer) { WOV.haptic("light"); B.cam.shake = Math.max(B.cam.shake, 2.5); }
   } else if (u.isPlayer && Math.random() < 0.12) WOV.haptic("soft");
+}
+function coolGuns(u, dt) {
+  if (!u.heat) return;
+  if (u.over > 0) { u.over -= dt; u.heat = Math.max(0, u.over / OVERHEAT_PAUSE); if (u.over <= 0) { u.over = 0; u.heat = 0; } return; }
+  u.hot -= dt; if (u.hot <= 0) u.heat = Math.max(0, u.heat - HEAT_COOL * dt);
 }
 function autoAA(u, dt) {
   const A = u.v.aa; if (!A || u.mods.aa) return;
@@ -811,8 +866,8 @@ function autoTarget(p) {
     if (w < bd && B.map.lineOfSight(p.x, p.y, e.x, e.y)) { bd = w; best = e; }
   }
   if (!best) return null;
-  const tt = Math.hypot(best.x - p.x, best.y - p.y) / (p.v.shell * (ammoDef(p).speed || 1));
-  return Math.atan2(best.y + Math.sin(best.angle) * best.vel * tt - p.y, best.x + Math.cos(best.angle) * best.vel * tt - p.x);
+  // the turret only follows the target: leading a moving enemy is the player's own skill
+  return Math.atan2(best.y - p.y, best.x - p.x);
 }
 function aimAssist(p, aim, cone) {
   let bt = null, bd = cone;
@@ -823,10 +878,12 @@ function aimAssist(p, aim, cone) {
     if (off < bd && (p.kind === "plane" || B.map.lineOfSight(p.x, p.y, e.x, e.y))) { bd = off; bt = e; }
   }
   if (!bt) return aim;
+  if (p.kind !== "plane") return aim; // tanks and ships: no hidden correction, the shot goes where the gun points
   const tt = Math.hypot(bt.x - p.x, bt.y - p.y) / (p.v.shell * (ammoDef(p).speed || 1));
   return Math.atan2(bt.y + Math.sin(bt.angle) * bt.vel * tt - p.y, bt.x + Math.cos(bt.angle) * bt.vel * tt - p.x);
 }
 
+const HEAT_PER_SHOT = 0.03, OVERHEAT_PAUSE = 2.8, HEAT_COOL = 0.35;
 const AIM_MIN = { tank: 0.012, ship: 0.016, plane: 0 }, AIM_TIME = { tank: 0.65, ship: 0.8, plane: 1 };
 function updatePlayer(dt) {
   const p = B.player, v = p.S, cam = B.cam;
@@ -860,12 +917,12 @@ function updatePlayer(dt) {
   else if (usingTouch) { const t = autoTarget(p); if (t) aim = t; } // touch: the turret follows the nearest enemy by itself
   p.autoAim = usingTouch && !manual && aim !== null;
   const prevT = p.tAngle, prevA = p.angle;
-  if (aim !== null) { aim = aimAssist(p, aim, 0.22); p.tAngle = approachAng(p.tAngle, aim, v.tturn * dt); }
+  if (aim !== null) p.tAngle = approachAng(p.tAngle, aim, v.tturn * dt * (p.autoAim ? 0.7 : 1));
   else p.tAngle = approachAng(p.tAngle, p.angle, v.tturn * dt * 0.3);
   // aiming circle: opens while moving or turning, closes over ~2 s when the vehicle stands still
   const base = AIM_MIN[p.kind] * (1 - 0.04 * (WOV.crewLvl ? WOV.crewLvl(p.kind, "aim") : 0));
   const turnRate = Math.abs(angNorm(p.tAngle - prevT)) / Math.max(dt, 1e-3) + Math.abs(angNorm(p.angle - prevA)) / Math.max(dt, 1e-3);
-  const goal = base + 0.085 * Math.min(1, Math.abs(p.vel) / p.v.speed) + 0.05 * Math.min(1, turnRate / 2.5) + (p.mods.gun || p.mods.battery || p.mods.turret ? 0.03 : 0);
+  const goal = base + (p.autoAim ? 0.018 : 0) + 0.085 * Math.min(1, Math.abs(p.vel) / p.v.speed) + 0.05 * Math.min(1, turnRate / 2.5) + (p.mods.gun || p.mods.battery || p.mods.turret ? 0.03 : 0);
   if (p.aim === undefined) p.aim = 0.12;
   p.aim = p.aim < goal ? p.aim + (goal - p.aim) * Math.min(1, dt * 7) : goal + (p.aim - goal) * Math.exp(-dt / AIM_TIME[p.kind]);
   p.aimBase = base; p.aimAt = aim;
@@ -930,11 +987,14 @@ function updateBot(u, dt) {
     ai.wx = w.x; ai.wy = w.y; ai.retarget = rnd(3, 6); ai.stuck = 0;
   }
   const near = Math.hypot(ai.wx - u.x, ai.wy - u.y) < 40;
-  drive(u, dt, Math.atan2(ai.wy - u.y, ai.wx - u.x), near ? 0 : 0.85, false);
+  // a good crew stops for a moment to take an aimed shot
+  ai.halt = (ai.halt || 0) - dt;
+  if (t && ai.halt < -4 && Math.random() < dt * 0.5 && Math.hypot(t.x - u.x, t.y - u.y) < range * 0.85 && B.map.lineOfSight(u.x, u.y, t.x, t.y)) ai.halt = rnd(1.2, 2.2);
+  drive(u, dt, Math.atan2(ai.wy - u.y, ai.wx - u.x), near || ai.halt > 0 ? 0 : 0.85, false);
   if (t) {
     const d = Math.hypot(t.x - u.x, t.y - u.y);
     if (d < range && B.map.lineOfSight(u.x, u.y, t.x, t.y)) {
-      const tt = d / v.shell, lead = 0.55;
+      const tt = d / v.shell, lead = 0.8;
       const aim = Math.atan2(t.y + Math.sin(t.angle) * t.vel * tt * lead - u.y, t.x + Math.cos(t.angle) * t.vel * tt * lead - u.x);
       u.tAngle = approachAng(u.tAngle, aim, u.S.tturn * dt * 0.8);
       if (u.cd <= 0 && Math.abs(angNorm(aim - u.tAngle)) < 0.08) fire(u);
@@ -981,7 +1041,7 @@ function update(dt) {
   const b = B;
   if (!b.over) b.time -= dt;
   if (b.net) { b.net.own = (b.net.own || 0) - dt; if (b.net.own <= 0) { b.net.own = 1; netOwners(); } }
-  for (const u of b.units) { u.cd -= dt; u.flash -= dt; u.bumped = false; if (!u.dead) { if (u.remote) u.S = effective(u); else updateModules(u, dt); } else u.S = u.S || effective(u); }
+  for (const u of b.units) { u.cd -= dt; u.flash -= dt; u.bumped = false; coolGuns(u, dt); if (!u.dead) { if (u.remote) u.S = effective(u); else updateModules(u, dt); } else u.S = u.S || effective(u); }
   for (const a of b.alerts) a.t -= dt;
   if (b.hitDirs) { for (const h of b.hitDirs) h.t -= dt; b.hitDirs = b.hitDirs.filter(h => h.t > 0); }
   b.alerts = b.alerts.filter(a => a.t > 0);
@@ -1061,9 +1121,9 @@ function update(dt) {
     const a0 = b.units.filter(u => u.team === 0 && !u.dead && !u.fixed).length, a1 = b.units.filter(u => u.team === 1 && !u.dead && !u.fixed).length;
     let result = null;
     if (a1 === 0) result = "win"; else if (a0 === 0) result = "lose";
+    else if (b.net && !isHost()) result = null; // online: the host decides tickets, timeouts and stalemates
     else if (b.tickets && b.tickets[1] <= 0) result = "win"; else if (b.tickets && b.tickets[0] <= 0) result = "lose";
     else if (b.tickets && b.time <= 0) result = b.tickets[0] >= b.tickets[1] ? "win" : "lose";
-    else if (b.net && !isHost()) result = null; // the host decides timeouts and stalemates
     else if (b.assault) result = b.time <= 0 ? (b.attT === 0 ? "lose" : "win") : null;
     else if (b.time <= 0 || (b.lastDmg !== undefined ? b.lastDmg : b.mode.time) - b.time > 30) {
       const hpOf = t => b.units.filter(u => u.team === t).reduce((s, u) => s + Math.max(0, u.hp) / u.maxHp, 0);
@@ -1080,9 +1140,11 @@ function finish(result, fromNet) {
   WOV.haptic(result === "win" ? "success" : "warning");
   if (WOV.Audio) { WOV.Audio.engine(null); WOV.Audio.music(null); SFX(result); }
   const p = b.player, prof = WOV.profile;
-  let coins = Math.round((150 + p.dmgDone * 0.8 + p.kills * (150 + 25 * p.v.tier) + (p.caps || 0) * 150) * (b.mode.coinMul || 1)) + (result === "win" ? b.mode.winBonus : 0);
+  const mul = b.mode.coinMul || 1, tier = p.v.tier, win = result === "win";
+  let coins = Math.round((100 + p.dmgDone * 0.45 + p.kills * (80 + 15 * tier) + (p.caps || 0) * 90) * mul) + (win ? b.mode.winBonus : 0);
   const boosted = prof.boost > 0; if (boosted) { coins *= 2; prof.boost--; }
-  const xp = Math.round(coins * 0.5);
+  // experience counts only what you did in battle, so higher tiers need many more good battles to research
+  const xp = Math.round((120 + p.dmgDone * 0.6 + p.kills * (100 + 20 * tier) + (p.caps || 0) * 100) * mul + (win ? 250 : 0));
   const repair = p.dead && WOV.repairCost ? WOV.repairCost(p.v.base || p.v) : 0;
   coins = Math.max(0, coins - repair);
   const before = WOV.rank().r.i;
@@ -1224,7 +1286,7 @@ function render() {
 
 function drawHUD() {
   const b = B, p = b.player, tg = WOV.tg;
-  const top = 10 + ((tg && tg.safeAreaInset && tg.safeAreaInset.top) || 0) + ((tg && tg.contentSafeAreaInset && tg.contentSafeAreaInset.top) || 0);
+  const top = ROT ? 10 : 10 + ((tg && tg.safeAreaInset && tg.safeAreaInset.top) || 0) + ((tg && tg.contentSafeAreaInset && tg.contentSafeAreaInset.top) || 0);
   if (b.assault && (b.cap > 0 || b.capping)) {
     const w = 190, x = W / 2 - w / 2, y = Math.max(top + 110, H * 0.17), att = b.attT === 0;
     ctx.fillStyle = "rgba(10,14,13,.7)"; WOV.rr(ctx, x, y, w, 22, 7); ctx.fill();
@@ -1279,7 +1341,7 @@ function drawHUD() {
   ctx.fillStyle = "#33403a"; ctx.fillRect(18, top + 63, pw - 16, 6);
   ctx.fillStyle = p.hp / p.maxHp > 0.35 ? "#7fbf6b" : "#e0604a"; ctx.fillRect(18, top + 63, (pw - 16) * clamp(p.hp / p.maxHp, 0, 1), 6);
   let bar;
-  if (p.kind === "plane") { bar = clamp((p.vel - p.v.minSpeed) / (p.v.speed - p.v.minSpeed), 0, 1); ctx.fillStyle = "#33403a"; ctx.fillRect(18, top + 74, pw - 16, 4); ctx.fillStyle = "#8fc3d8"; }
+  if (p.kind === "plane") { bar = clamp(p.heat || 0, 0, 1); ctx.fillStyle = "#33403a"; ctx.fillRect(18, top + 74, pw - 16, 4); ctx.fillStyle = p.over > 0 ? (Math.floor(b.time * 6) % 2 ? "#ff5a32" : "#ffb04a") : bar > 0.7 ? "#ff7a3a" : "#8fc3d8"; }
   else { bar = clamp(1 - p.cd / p.v.reload, 0, 1); ctx.fillStyle = "#33403a"; ctx.fillRect(18, top + 74, pw - 16, 4); ctx.fillStyle = bar >= 1 ? "#d9a441" : "#8a7a55"; }
   ctx.fillRect(18, top + 74, (pw - 16) * bar, 4);
   // kill feed
@@ -1349,12 +1411,13 @@ function drawControls(p) {
   for (const c of controls()) {
     ctx.textAlign = "center";
     if (c.k === "fire") {
-      const on = fireBtn.id !== null, ready = reload <= 0;
+      const on = fireBtn.id !== null, ready = reload <= 0 && !(p.over > 0);
       ctx.globalAlpha = on ? 0.95 : 0.8;
       ctx.fillStyle = ready ? (on ? "#f3cf7a" : "#d9a441") : "#7d6a42"; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.fill();
       ctx.strokeStyle = A.col; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(c.x, c.y, c.r + 4, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - reload)); ctx.stroke();
       ctx.globalAlpha = 1; ctx.fillStyle = "#1d1a12"; ctx.font = "900 13px system-ui, sans-serif"; ctx.fillText("ВОГОНЬ", c.x, c.y + 1);
-      ctx.font = "800 10px system-ui, sans-serif"; ctx.fillText(A.short, c.x, c.y + 16);
+      ctx.font = "800 10px system-ui, sans-serif"; ctx.fillText(p.over > 0 ? "ПЕРЕГРІВ" : A.short, c.x, c.y + 16);
+      if (p.kind === "plane" && p.heat > 0) { ctx.strokeStyle = p.over > 0 ? "#ff5a32" : "#ff9a4a"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(c.x, c.y, c.r - 5, Math.PI * 0.75, Math.PI * 0.75 + Math.PI * 1.5 * p.heat); ctx.stroke(); }
     } else if (c.k === "ammo") {
       const left = ammoLeft(p, c.a), sel = c.a.id === p.ammo, none = left <= 0;
       ctx.globalAlpha = none ? 0.35 : 0.92;

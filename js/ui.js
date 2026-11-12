@@ -18,8 +18,10 @@ const ICONS = {
   tree: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="5" rx="1.5"/><rect x="3" y="16" width="6" height="5" rx="1.5"/><rect x="15" y="16" width="6" height="5" rx="1.5"/><path d="M12 8v4M6 16v-4h12v4"/></svg>',
   shop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 8h16l-1.5 12h-13z"/><path d="M8 8a4 4 0 018 0"/></svg>',
   sound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>',
   music: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 17.5V5.5l11-2.5v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6.5" cy="17.5" r="2.8"/><circle cx="17.5" cy="15" r="2.8"/></svg>',
   tasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8.5l1.5 1.5L12 7.5M8 14.5l1.5 1.5 2.5-2.5M14.5 9h2M14.5 15h2"/></svg>',
+  swords: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l10.5 10.5M4 4h3.5L17 13.5M4 4v3.5L13.5 17"/><path d="M20 4L9.5 14.5M20 4h-3.5L7 13.5M20 4v3.5L10.5 17"/><path d="M13 16l4 4M15 18l-2 2M11 16l-4 4M9 18l2 2" stroke-width="2.2"/></svg>',
   friends: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-4 3.4-6 6.5-6s5.7 2 6.5 6"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.2c2.8.1 4.8 1.9 5.5 5.3"/></svg>',
 };
 WOV.ICONS = ICONS;
@@ -57,13 +59,13 @@ WOV.on("wallet", () => { renderWallet(); });
 let tab = "hangar";
 function setTab(t) {
   tab = t;
-  document.querySelectorAll(".tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === t));
+  document.querySelectorAll(".tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === (t === "tree" ? "hangar" : t)));
   document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === "scr-" + t));
   if (t === "hangar") renderHangar(); else if (t === "tree") renderTree(); else if (t === "shop") renderShop(); else if (t === "tasks") renderTasks(); else renderFriends();
   updateTaskDot();
   WOV.haptic("select");
 }
-document.querySelectorAll(".tabbar button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+document.querySelectorAll(".tabbar button").forEach(b => b.onclick = () => b.dataset.tab === "battle" ? battleSheet() : setTab(b.dataset.tab));
 
 function segment(container, value, onChange) {
   container.innerHTML = "";
@@ -87,7 +89,7 @@ function statsOf(v) {
   if (v.kind === "plane") rows.push(["Маневр", v.turn.toFixed(1), v.turn / max(o => o.turn)]);
   else rows.push(["Броня лоба", Math.round((1 - v.armor[0]) * 100) + "%", (1 - v.armor[0]) / max(o => 1 - o.armor[0])]);
   rows.push(["Дальність", Math.round(v.shell * v.range) + " м", (v.shell * v.range) / max(o => o.shell * o.range)]);
-  rows.push(["Ранг", WOV.ROMAN[v.tier], v.tier / 7]);
+  rows.push(["Ранг", WOV.ROMAN[v.tier], v.tier / WOV.MAX_TIER]);
   return rows.map(([n, val, k]) => '<div class="stat"><div><span>' + n + "</span><b>" + val + '</b></div><i style="--v:' + Math.round(Math.max(0.06, Math.min(1, k)) * 100) + '%"></i></div>').join("");
 }
 const roleName = { light: "легкий танк", medium: "середній танк", heavy: "важкий танк", mbt: "основний бойовий танк", fighter: "винищувач", attacker: "штурмовик", heavy_plane: "важкий винищувач", boat: "торпедний катер", destroyer: "есмінець", cruiser: "крейсер", battleship: "лінкор" };
@@ -97,7 +99,8 @@ const roleOf = v => v.kind === "plane" && v.role === "heavy" ? roleName.heavy_pl
 let hangarAngle = -Math.PI / 2, hangarRaf = 0, mode = "team";
 function renderHangar() {
   const p = WOV.profile, v = WOV.currentVehicle();
-  segment($("#hangarCls"), p.cls, k => { p.cls = k; WOV.save(); renderHangar(); });
+  segment($("#hangarCls"), p.cls, k => { p.cls = k; WOV.save(); treeCls = k; setTab("tree"); });
+  $("#hangarCls").querySelectorAll("button").forEach(b => { b.innerHTML += ' <span class="arr">›</span>'; });
   $("#hTier").textContent = WOV.ROMAN[v.tier]; $("#hTier").className = "tier" + (v.prem ? " prem" : "");
   $("#hName").textContent = v.name; $("#hMeta").textContent = v.nation + " · " + roleOf(v) + (v.prem ? " · преміум" : "");
   const mq = WOV.masteryOf(v.id); if (mq) $("#hName").insertAdjacentHTML("beforeend", ' <span class="mastery" style="--c:' + mq.col + '" title="' + mq.name + '">' + mq.short + "</span>");
@@ -119,12 +122,6 @@ function renderHangar() {
     cs.appendChild(b);
   }
   const shopCamo = el("button", "camo", '<span style="display:grid;place-items:center;color:var(--muted);font-size:20px">+</span>'); shopCamo.onclick = () => setTab("shop"); cs.appendChild(shopCamo);
-  const ms = $("#modes"); ms.innerHTML = "";
-  for (const id of ["quick", "conquest", "assault", "team"]) {
-    const m = WOV.MODES[id], b = el("button", "mode" + (mode === id ? " sel" : ""), "<b>" + m.name + "</b><small>" + m.desc + "</small>");
-    b.onclick = () => { mode = id; renderHangar(); WOV.haptic("select"); }; ms.appendChild(b);
-  }
-  $("#boostInfo").textContent = p.boost > 0 ? "×2 монет ще на " + p.boost + " боїв" : v.name + " · ранг " + WOV.ROMAN[v.tier];
   cancelAnimationFrame(hangarRaf);
   const spinStage = () => {
     if (tab !== "hangar" || WOV.Battle.active()) return;
@@ -138,7 +135,7 @@ function renderAmmoRow(v) {
   const p = WOV.profile, row = $("#hAmmo"); row.innerHTML = "";
   const list = WOV.AMMO[v.kind]; let sel = list.find(a => a.id === p.ammoSel[v.kind]) || list[0];
   for (const a of list) {
-    const left = a.limit ? a.limit + " на бій" : a.stock ? "запас " + fmt(p.ammo[a.stock] || 0) : "безліміт";
+    const left = a.stock ? "запас " + fmt(p.ammo[a.stock] || 0) + (a.limit ? " · до " + a.limit + " на бій" : "") : a.limit ? a.limit + " на бій" : "безліміт";
     const none = a.stock && !(p.ammo[a.stock] > 0);
     const b = el("button", "ammo" + (a === sel ? " sel" : "") + (none ? " none" : ""), shellIco(a) + "<b>" + a.name + "</b><small>" + left + "</small>");
     b.onclick = () => {
@@ -153,7 +150,25 @@ function swatchBg(cm, v) {
   const c = cm.colors || [v ? v.look.color : "#6f7d4f", "#555", "#777"];
   return "radial-gradient(circle at 30% 30%, " + c[1] + " 0 22%, transparent 23%), radial-gradient(circle at 75% 70%, " + c[2] + " 0 26%, transparent 27%), " + c[0];
 }
-$("#toBattle").onclick = () => startBattle();
+// battle button in the bottom bar: pick a mode, then fight
+function battleSheet() {
+  const p = WOV.profile, v = WOV.currentVehicle();
+  WOV.haptic("medium");
+  openSheet('<h2>До бою</h2><div class="sub">' + v.name + " · ранг " + WOV.ROMAN[v.tier] + (p.boost > 0 ? " · ×2 монет ще на " + p.boost + " боїв" : "") + '</div><div class="modes" id="modes"></div><button class="btn-battle" id="toBattle"><span>В БІЙ</span><small id="boostInfo"></small></button>', sh => {
+    const draw = () => {
+      const ms = sh.querySelector("#modes"); ms.innerHTML = "";
+      for (const id of ["quick", "conquest", "assault", "team"]) {
+        const m = WOV.MODES[id], off = m.assault && v.kind === "plane";
+        const b = el("button", "mode" + (mode === id ? " sel" : "") + (off ? " off" : ""), "<b>" + m.name + "</b><small>" + m.desc + "</small>");
+        b.onclick = () => { mode = id; draw(); WOV.haptic("select"); }; ms.appendChild(b);
+      }
+      sh.querySelector("#boostInfo").textContent = WOV.MODES[mode].name;
+    };
+    draw();
+    sh.querySelector("#toBattle").onclick = () => startBattle();
+  });
+}
+$("#treeBack").onclick = () => setTab("hangar");
 
 // ---------- tech tree ----------
 let treeCls = "tank";
@@ -169,7 +184,7 @@ function renderTree() {
   $("#treeHint").innerHTML = tgt ? "Досліджується: <b style='color:#9fd8ff'>" + tgt.name + "</b> · " + fmt(WOV.rpOf(tgt)) + " / " + fmt(WOV.rpNeed(tgt)) + " досвіду. Досвід приходить з кожного бою на техніці цього класу. Торкнись іншої машини, щоб досліджувати її." : "Усе доступне в цьому класі досліджено.";
   const tree = $("#tree"); tree.innerHTML = "";
   const list = WOV.VEHICLES.filter(v => v.kind === treeCls && !v.prem && (treeNat === "all" || WOV.nationOf(v) === treeNat));
-  for (let t = 1; t <= 7; t++) {
+  for (let t = 1; t <= WOV.MAX_TIER; t++) {
     const row = el("div", "tier-row", '<div class="tier-label">' + WOV.ROMAN[t] + '</div><div class="tier-cards"></div>');
     for (const v of list.filter(v => v.tier === t)) row.lastChild.appendChild(treeCard(v));
     tree.appendChild(row);
@@ -187,6 +202,7 @@ function treeCard(v) {
   const cls = "tcard " + (owned ? "owned" : avail ? "avail" : resNow ? "research" : "locked") + (sel ? " sel" : "");
   let state, extra = "";
   if (owned) state = sel ? "В АНГАРІ ✓" : "ОТРИМАНО";
+  else if (v.stars) state = "⭐ " + fmt(v.stars);
   else if (v.prem) state = ICONS.crystal + fmt(v.prem);
   else if (avail) state = ICONS.coin + fmt(WOV.priceOf(v));
   else if (resNow) { const k = WOV.rpOf(v) / WOV.rpNeed(v); state = "Дослідж. " + Math.floor(k * 100) + "%"; extra = '<div class="rbar"><i style="width:' + Math.round(k * 100) + '%"></i></div>'; }
@@ -211,6 +227,7 @@ function vehicleSheet(v) {
   const owned = WOV.owns(v.id), avail = WOV.canUnlock(v), p = WOV.profile;
   let action;
   if (owned) action = '<button class="btn-main" id="vsSel">' + (p.sel[v.kind] === v.id ? "Вже в ангарі" : "Обрати в ангар") + "</button>";
+  else if (v.stars) action = '<button class="btn-main" id="vsBuy">Купити за ⭐ ' + fmt(v.stars) + " зірок Telegram</button>";
   else if (v.prem) action = '<button class="btn-main" id="vsBuy">Купити за ' + fmt(v.prem) + " кристалів</button>";
   else if (avail) action = '<button class="btn-main" id="vsBuy">Купити за ' + fmt(WOV.priceOf(v)) + " монет</button>";
   else if (WOV.researchable(v)) {
@@ -227,7 +244,19 @@ function vehicleSheet(v) {
     const res = s.querySelector("#vsRes"); if (res) res.onclick = () => { p.resTarget[v.kind] = v.id; WOV.save(); WOV.haptic("success"); closeSheet(); toast("Досвід тепер іде на " + v.name); if (tab === "tree") renderTree(); };
   });
 }
+// Stars-only vehicles: the server sells product "v_<id>" and hands the vehicle out on claim
+function buyStarVehicle(v) {
+  if (!WOV.Net || !WOV.Net.inTelegram()) { toast("Купівля за зірки працює в Telegram"); return; }
+  toast("Відкриваю оплату…");
+  WOV.Net.buy("v_" + v.id, r => {
+    if (r.error) { toast(r.error === "notg" ? "Купівля за зірки працює в Telegram" : "Оплата недоступна: " + r.error); return; }
+    if (r.status !== "paid") { if (r.status === "failed") toast("Оплата не пройшла"); return; }
+    if (WOV.owns(v.id)) { const p = WOV.profile; p.sel[v.kind] = v.id; p.cls = v.kind; WOV.save(); WOV.haptic("success"); closeSheet(); toast("Нова техніка: " + v.name + "!"); if (tab === "tree") renderTree(); else if (tab === "shop") renderShop(); }
+    else toast("Оплату отримано, техніка з'явиться за хвилину");
+  });
+}
 function buyVehicle(v) {
+  if (v.stars) return buyStarVehicle(v);
   const cur = v.prem ? "crystals" : "coins", price = v.prem || WOV.priceOf(v);
   if (!WOV.spend(cur, price)) { WOV.haptic("error"); toast(cur === "coins" ? "Не вистачає монет. Заробляй у боях!" : "Не вистачає кристалів. Відкривай бокси!"); return; }
   const p = WOV.profile; p.owned.push(v.id); p.sel[v.kind] = v.id; p.cls = v.kind; WOV.save();
@@ -240,13 +269,13 @@ function boxArt(b) { return '<div class="boxart" style="--c:' + b.color + ";--r:
 let shopTab = "boxes";
 const SHOP_TABS = [["stars", "⭐ Зірки"], ["boxes", "Бокси"], ["ammo", "Снаряди"], ["vehicles", "Техніка"], ["camo", "Камуфляж"], ["other", "Інше"]];
 const shellIco = (a, txt) => '<div class="shell-ico" style="--c:' + a.col + '">' + (txt || a.short) + "</div>";
-const STOCK_ICO = { apcr: { col: "#9fd8ff", short: "ПК" }, inc: { col: "#ff7a3a", short: "ЗАП" }, heavy: { col: "#c9a8ff", short: "НВ" }, repair: { col: "#7fbf6b", short: "РЕМ" }, strike: { col: "#ff5a32", short: "АРТ" } };
+const STOCK_ICO = { apcr: { col: "#9fd8ff", short: "ПК" }, inc: { col: "#ff7a3a", short: "ЗАП" }, heavy: { col: "#c9a8ff", short: "НВ" }, rocket: { col: "#ffd36a", short: "РАК" }, repair: { col: "#7fbf6b", short: "РЕМ" }, strike: { col: "#ff5a32", short: "АРТ" } };
 function noMoney(cur) { WOV.haptic("error"); toast(cur === "coins" ? "Не вистачає монет" : "Не вистачає кристалів"); }
 const todayKey = () => { const d = new Date(); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); };
 // one discounted item per day (same for the whole day), chosen from things the player does not own yet
 function dailyDeal() {
   const p = WOV.profile, pool = [];
-  for (const v of WOV.VEHICLES) if (v.prem && !WOV.owns(v.id)) pool.push({ type: "vehicle", v, full: v.prem });
+  for (const v of WOV.VEHICLES) if (v.prem && !v.stars && !WOV.owns(v.id)) pool.push({ type: "vehicle", v, full: v.prem });
   for (const c of WOV.CAMOS) if (c.price > 0 && !p.camos.includes(c.id)) pool.push({ type: "camo", c, full: c.price });
   if (!pool.length) return null;
   let h = 0; for (const ch of todayKey()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -325,9 +354,9 @@ function renderShop() {
     }
   } else if (shopTab === "vehicles") {
     const pl = el("div", "prem"); body.appendChild(pl);
-    for (const v of WOV.VEHICLES.filter(v => v.prem)) {
+    for (const v of WOV.VEHICLES.filter(v => v.prem).sort((a, b) => (b.stars ? 1 : 0) - (a.stars ? 1 : 0))) {
       const owned = WOV.owns(v.id);
-      const c = el("button", "shopitem" + (owned ? " owned" : ""), "<canvas></canvas><b>" + v.name + " · " + WOV.ROMAN[v.tier] + "</b>" + (owned ? '<span class="price">Отримано ✓</span>' : priceHtml("crystals", v.prem)));
+      const c = el("button", "shopitem" + (owned ? " owned" : ""), "<canvas></canvas><b>" + v.name + " · " + WOV.ROMAN[v.tier] + "</b>" + (owned ? '<span class="price">Отримано ✓</span>' : v.stars ? '<span class="price">⭐ ' + fmt(v.stars) + "</span>" : priceHtml("crystals", v.prem)));
       c.onclick = () => vehicleSheet(v); pl.appendChild(c);
       WOV.preview(c.querySelector("canvas"), v, { fill: 0.9, angle: -0.5, tAngle: -0.2 });
     }
@@ -574,17 +603,17 @@ let mmCancel = null;
 function startBattle() {
   if (WOV.MODES[mode].assault && WOV.currentVehicle().kind === "plane") { toast("У «Штурмі» воюють лише танки й кораблі. Обери танк або корабель", 3000); WOV.haptic("error"); return; }
   WOV.haptic("heavy");
-  if (mode !== "quick" || !WOV.Net || !WOV.Net.enabled()) return launch();
-  // quick battle: look for real players first, fill the rest with bots
+  if (!WOV.Net || !WOV.Net.enabled()) return launch();
+  // every mode: look for real players with vehicles of a close tier first, fill the rest with bots
   const v = WOV.currentVehicle(), camo = WOV.camoOf(v);
   $("#modal").dataset.lock = "1";
-  openSheet('<h2>Пошук гравців</h2><div class="sub">Швидкий бій 4 на 4: живі гравці твого рангу, решта місць боти</div>' +
+  openSheet('<h2>Пошук гравців</h2><div class="sub">' + WOV.MODES[mode].name + ": живі гравці з технікою рангу " + WOV.ROMAN[Math.max(1, v.tier - 1)] + "–" + WOV.ROMAN[Math.min(WOV.MAX_TIER, v.tier + 1)] + ', решта місць боти</div>' +
     '<div class="mm"><div class="radar"><i></i></div><div><b id="mmCount">Підключення…</b><small id="mmLeft"></small></div></div>' +
     '<div class="actions"><button class="btn-sec" id="mmCancel">Скасувати</button><button class="btn-main" id="mmBots">Грати з ботами</button></div>', sh => {
     sh.querySelector("#mmCancel").onclick = () => { if (mmCancel) mmCancel(); mmCancel = null; delete $("#modal").dataset.lock; closeSheet(); };
     sh.querySelector("#mmBots").onclick = () => { if (mmCancel) mmCancel(); mmCancel = null; launch(); };
   });
-  mmCancel = WOV.Net.findMatch({ id: WOV.Net.myId, name: WOV.profile.name, vid: v.id, kind: v.kind, tier: v.tier, camo: camo ? camo.id : "" }, {
+  mmCancel = WOV.Net.findMatch({ id: WOV.Net.myId, name: WOV.profile.name, vid: v.id, kind: v.kind, tier: v.tier, camo: camo ? camo.id : "", mode }, {
     status(n, left) { const c = $("#mmCount"), l = $("#mmLeft"); if (!c) return; c.textContent = n <= 1 ? "Шукаємо суперників…" : "У черзі: " + n + " гравц" + (n < 5 ? "і" : "ів"); l.textContent = left > 0 ? "Старт через " + left + " с" : "Збираємо бій…"; },
     match(m) { mmCancel = null; WOV.haptic("success"); launch(m); },
     timeout() { mmCancel = null; if (!$("#modal").classList.contains("hidden") && $("#mmCount")) { toast("Живих гравців зараз немає, бій з ботами"); launch(); } },
@@ -639,11 +668,36 @@ if (tg && tg.BackButton) tg.BackButton.onClick(() => {
 const A = WOV.Audio;
 function renderSound() {
   const p = WOV.profile;
-  $("#sndBtn").classList.toggle("off", !p.sound); $("#musBtn").classList.toggle("off", !p.music); $("#battleSnd").classList.toggle("off", !p.sound && !p.music);
+  $("#battleSnd").classList.toggle("off", !p.sound && !p.music);
   if (A) { A.setSound(p.sound); A.setMusic(p.music); }
 }
-$("#sndBtn").onclick = e => { e.stopPropagation(); WOV.profile.sound = !WOV.profile.sound; WOV.save(); renderSound(); toast(WOV.profile.sound ? "Звуки увімкнено" : "Звуки вимкнено", 1200); };
-$("#musBtn").onclick = e => { e.stopPropagation(); WOV.profile.music = !WOV.profile.music; WOV.save(); renderSound(); toast(WOV.profile.music ? "Музику увімкнено" : "Музику вимкнено", 1200); };
+// ---------- settings: sound, music, screen orientation, bot reminders ----------
+const ORIENTS = [["auto", "Авто"], ["portrait", "Вертикально"], ["landscape", "Горизонтально"]];
+function applyOrient() {
+  const o = WOV.profile.orient;
+  try { if (tg && tg.lockOrientation && tg.unlockOrientation) { if (o === "auto") tg.unlockOrientation(); else tg.lockOrientation(); } } catch (e) {}
+}
+function settingsSheet() {
+  const p = WOV.profile;
+  const tog = (id, on) => '<button class="toggle' + (on ? " on" : "") + '" id="' + id + '" aria-pressed="' + on + '"></button>';
+  openSheet('<h2>Налаштування</h2><div class="card">' +
+    '<div class="set-row"><div><b>Звуки</b><small>Постріли, вибухи, двигун</small></div>' + tog("stSnd", p.sound) + "</div>" +
+    '<div class="set-row"><div><b>Музика</b></div>' + tog("stMus", p.music) + "</div>" +
+    '<div class="set-row" style="flex-wrap:wrap"><div><b>Орієнтація бою</b><small>Горизонтально: бій повертається боком, тримай телефон горизонтально</small></div><div class="seg" id="stOri">' +
+      ORIENTS.map(([k, t]) => '<button data-o="' + k + '" class="' + (p.orient === k ? "active" : "") + '">' + t + "</button>").join("") + "</div></div>" +
+    '<div class="set-row"><div><b>Нагадування від бота</b><small>Двічі на день: щоденна нагорода, нові завдання</small></div>' + tog("stNot", p.notify) + "</div>" +
+    "</div>", sh => {
+    sh.querySelector("#stSnd").onclick = () => { p.sound = !p.sound; WOV.save(); renderSound(); settingsSheet(); };
+    sh.querySelector("#stMus").onclick = () => { p.music = !p.music; WOV.save(); renderSound(); settingsSheet(); };
+    sh.querySelectorAll("#stOri button").forEach(b => b.onclick = () => { p.orient = b.dataset.o; WOV.save(); applyOrient(); settingsSheet(); toast(p.orient === "landscape" ? "Бій буде горизонтальним" : p.orient === "portrait" ? "Бій буде вертикальним" : "Бій повертається разом з телефоном", 1600); });
+    sh.querySelector("#stNot").onclick = () => {
+      if (!WOV.Net || !WOV.Net.inTelegram()) { toast("Нагадування працюють у Telegram"); return; }
+      if (p.notify) WOV.Net.stopMessages(ok => { if (ok) { p.notify = false; WOV.save(); settingsSheet(); toast("Нагадування вимкнено"); } });
+      else WOV.Net.allowMessages(ok => { p.notify = !!ok; p.notifyAsked = true; WOV.save(); settingsSheet(); toast(ok ? "Бот нагадуватиме про нагороди" : "Дозвіл не надано"); });
+    };
+  });
+}
+$("#setBtn").onclick = e => { e.stopPropagation(); settingsSheet(); };
 $("#battleSnd").onclick = () => { const p = WOV.profile, on = !(p.sound || p.music); p.sound = p.music = on; WOV.save(); renderSound(); };
 // soft click on every menu button
 document.addEventListener("click", e => { if (A && e.target.closest("#app button, #modal button") && !e.target.closest("#toBattle")) A.sfx("click", { vol: 0.6 }); }, true);
@@ -658,6 +712,12 @@ WOV.load(() => {
   if (WOV.pendingToast) setTimeout(() => toast(WOV.pendingToast, 3500), 600);
   // purchases paid while the game was closed
   if (WOV.Net) WOV.Net.hello().then(msg => { if (msg) toast("Покупка зарахована: " + msg, 4000); });
+  applyOrient();
+  // ask once (after a couple of battles) whether the bot may send reminders
+  if (WOV.Net && WOV.Net.inTelegram() && !WOV.profile.notifyAsked && WOV.profile.stats.battles >= 2) setTimeout(() => {
+    WOV.profile.notifyAsked = true; WOV.save();
+    WOV.Net.allowMessages(ok => { if (ok) { WOV.profile.notify = true; WOV.save(); toast("Бот нагадуватиме про щоденні нагороди"); } });
+  }, 2500);
   if (!WOV.loginState().claimed) setTimeout(() => {
     const st = WOV.loginState(); if (st.claimed || WOV.Battle.active()) return;
     openSheet('<h2>Щоденний вхід</h2><div class="sub">Заходь щодня: що довша серія, то краща нагорода. Пропустиш день, і серія почнеться знову.</div><div id="loginSheet"></div>', sh => renderLogin(sh.querySelector("#loginSheet")));

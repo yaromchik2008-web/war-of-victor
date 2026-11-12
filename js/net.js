@@ -35,13 +35,33 @@ async function api(action, extra) {
   return j;
 }
 // paid purchases that reached the server: add them to the profile
-function applyClaim(c) {
-  if (!c || (!c.crystals && !c.coins)) return null;
+// vehicles bought for Stars come as product names "v_<id>"
+function grantVehicles(list) {
+  const p = WOV.profile, got = [];
+  for (const pr of list || []) {
+    const id = String(pr).slice(2), v = WOV.byId[id];
+    if (String(pr).startsWith("v_") && v && !p.owned.includes(id)) { p.owned.push(id); got.push(v.name); }
+  }
+  if (got.length) { WOV.save(); WOV.emit("wallet"); }
+  return got;
+}
+function applyClaim(c, extraVehicles) {
+  const got = grantVehicles((c && c.items || []).concat(extraVehicles || []));
+  if (!c || (!c.crystals && !c.coins && !got.length)) return null;
   const p = WOV.profile; p.crystals += c.crystals || 0; p.coins += c.coins || 0; WOV.save(); WOV.emit("wallet");
   const parts = []; if (c.crystals) parts.push("+" + c.crystals + " кристалів"); if (c.coins) parts.push("+" + c.coins + " монет");
+  if (got.length) parts.push(got.join(", ") + " в ангарі");
   return parts.join(" і ");
 }
-const hello = () => api("hello").then(j => applyClaim(j.claim)).catch(() => null);
+const hello = () => api("hello").then(j => applyClaim(j.claim, j.vehicles)).catch(() => null);
+// reminders from the bot: ask Telegram for permission once, then tell the server
+function allowMessages(cb) {
+  if (!tg || !tg.initData) return cb && cb(false);
+  const send = on => api("notify", { on }).then(() => cb && cb(on)).catch(() => cb && cb(false));
+  if (tg.requestWriteAccess) { try { tg.requestWriteAccess(ok => (ok ? send(true) : cb && cb(false))); } catch (e) { send(true); } }
+  else send(true);
+}
+const stopMessages = cb => api("notify", { on: false }).then(() => cb && cb(true)).catch(() => cb && cb(false));
 const claim = () => api("claim").then(j => applyClaim(j.claim)).catch(() => null);
 const reportBattle = s => api("battle", { kills: s.kills, dmg: s.dmg, xp: s.xp, win: s.result === "win" }).catch(() => null);
 const top = by => api("top", { by });
@@ -59,9 +79,10 @@ function buy(product, done) {
   }).catch(e => done({ error: e.message }));
 }
 
-// ---------- matchmaking: everyone waiting sits in one presence channel ----------
-const WAIT = 9000, MAXP = 8;
+// ---------- matchmaking: one presence channel per mode; only vehicles within one tier of each other meet ----------
+const WAIT = 9000;
 function findMatch(me, h) {
+  const mode = WOV.MODES[me.mode] ? me.mode : "quick", MAXP = Math.min(10, WOV.MODES[mode].team * 2);
   let ch = null, done = false, timer = null;
   const t0 = Date.now();
   const finish = fn => { if (done) return; done = true; clearInterval(timer); if (ch) { ch.untrack().catch(() => {}); sb.removeChannel(ch); } fn(); };
@@ -72,14 +93,17 @@ function findMatch(me, h) {
   };
   const tick = () => {
     if (done) return;
-    const list = waiting(), left = Math.max(0, Math.ceil((t0 + WAIT - Date.now()) / 1000));
+    // only players whose vehicle tier is close to mine count: a tier I vehicle never meets a tier V one
+    const list = waiting().filter(m => Math.abs((m.tier || 1) - me.tier) <= 1), left = Math.max(0, Math.ceil((t0 + WAIT - Date.now()) / 1000));
     h.status(list.length, left);
-    const fair = list.filter(m => Math.abs(m.tier - list[0].tier) <= 1);
+    // the leader keeps a spread of at most one tier: [t-1, t] or [t, t+1], whichever has more players
+    const lo = list.filter(m => m.tier <= me.tier), hi = list.filter(m => m.tier >= me.tier);
+    const fair = lo.length >= hi.length ? lo : hi;
     if (list[0] && list[0].id === me.id) {
       // I waited longest: I build the match (and later host the bots)
       if (fair.length >= MAXP || (Date.now() - t0 > WAIT && fair.length >= 2)) {
         const players = fair.slice(0, MAXP).map(m => ({ id: m.id, name: m.name, vid: m.vid, camo: m.camo }));
-        const match = { mid: me.id + "-" + Date.now().toString(36), host: me.id, seed: Math.floor(Math.random() * 1e9), players };
+        const match = { mode, mid: me.id + "-" + Date.now().toString(36), host: me.id, seed: Math.floor(Math.random() * 1e9), players };
         ch.send({ type: "broadcast", event: "match", payload: match });
         finish(() => h.match(match));
       } else if (Date.now() - t0 > WAIT) finish(() => h.timeout());
@@ -87,7 +111,7 @@ function findMatch(me, h) {
   };
   client().then(c => {
     if (done) return;
-    ch = c.channel("wov-mm-v1", { config: { presence: { key: me.id }, broadcast: { self: false } } });
+    ch = c.channel("wov-mm-v2-" + mode, { config: { presence: { key: me.id }, broadcast: { self: false } } });
     ch.on("presence", { event: "sync" }, tick);
     ch.on("broadcast", { event: "match" }, ({ payload }) => { if (payload.players.some(p => p.id === me.id)) finish(() => h.match(payload)); });
     ch.subscribe(st => {
@@ -125,5 +149,5 @@ function joinMatch(mid, h) {
   };
 }
 
-WOV.Net = { enabled, myId, inTelegram: () => !!(tg && tg.initData), hello, claim, reportBattle, top, buy, findMatch, joinMatch };
+WOV.Net = { enabled, myId, inTelegram: () => !!(tg && tg.initData), hello, claim, allowMessages, stopMessages, reportBattle, top, buy, findMatch, joinMatch };
 })();

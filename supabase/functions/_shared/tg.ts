@@ -46,6 +46,13 @@ export const PRODUCTS: Record<string, { stars: number; crystals: number; coins: 
   cr250: { stars: 250, crystals: 2300, coins: 0,     title: "2300 кристалів" },
   co20:  { stars: 20,  crystals: 0,    coins: 25000, title: "25 000 монет" },
   pack75:{ stars: 75,  crystals: 400,  coins: 40000, title: "Набір командира" },
+  // vehicles sold only for Stars: the game gives the vehicle when it sees the product name "v_<id>"
+  v_jumbo:   { stars: 150, crystals: 0, coins: 0, title: "Танк M4A3E2 Jumbo" },
+  v_t44_100: { stars: 300, crystals: 0, coins: 0, title: "Танк Т-44-100" },
+  v_spit24:  { stars: 200, crystals: 0, coins: 0, title: "Літак Spitfire F Mk 24" },
+  v_f104:    { stars: 350, crystals: 0, coins: 0, title: "Літак F-104 Starfighter" },
+  v_z52:     { stars: 200, crystals: 0, coins: 0, title: "Есмінець Z-52" },
+  v_hood:    { stars: 350, crystals: 0, coins: 0, title: "Лінійний крейсер Hood" },
 };
 
 export const cors = {

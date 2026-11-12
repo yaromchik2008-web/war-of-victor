@@ -1,0 +1,22 @@
+# Twice a day asks the server to send short reminders from the bot (daily reward, tasks).
+# Times are UTC: 08:00 and 17:00 UTC are 10:00 and 19:00 in Kyiv in winter.
+name: Bot reminders
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    env:
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      PROJECT_REF: ggbvjcdbiqqjwjgyuuqc
+    steps:
+      - name: Send reminders
+        run: |
+          KEY=$(printf '%s' "wov-remind:$BOT_TOKEN" | sha256sum | cut -d' ' -f1)
+          SLOT=morning; [ "$(date -u +%H)" -ge 12 ] && SLOT=evening
+          curl -sS --fail -X POST "https://$PROJECT_REF.supabase.co/functions/v1/remind?slot=$SLOT" -H "x-remind-key: $KEY"

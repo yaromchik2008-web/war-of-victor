@@ -49,8 +49,16 @@ Deno.serve(async req => {
   const me = await ensurePlayer(user.id, name);
 
   switch (body.action) {
-    case "hello":
-      return json({ ok: true, claim: await claim(user.id) });
+    case "hello": {
+      await db.from("players").update({ last_seen: new Date().toISOString() }).eq("tg_id", user.id);
+      // every vehicle ever bought for Stars, so it comes back even after the game data was cleared
+      const { data: bought } = await db.from("purchases").select("product").eq("tg_id", user.id).like("product", "v\\_%");
+      return json({ ok: true, claim: await claim(user.id), vehicles: [...new Set((bought || []).map(r => r.product))] });
+    }
+    case "notify":
+      // the player allowed the bot to write (Telegram's requestWriteAccess) or switched reminders in settings
+      await db.from("players").update({ notify: !!body.on }).eq("tg_id", user.id);
+      return json({ ok: true });
 
     case "battle": {
       // per-battle deltas with sane limits; at most one result every 20 s

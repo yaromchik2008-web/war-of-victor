@@ -14,7 +14,8 @@ WOV.NATIONS = [
 WOV.nationOf = v => (v.nation === "ФРН" ? "Німеччина" : v.nation);
 
 // ---------- research: experience earned in battles unlocks the next vehicles ----------
-WOV.rpNeed = v => (v.prem || WOV.STARTERS.includes(v.id) ? 0 : Math.round(600 * Math.pow(v.tier, 1.6)));
+// each tier needs much more experience than the one before: II ≈ 2 100, V ≈ 21 000, X ≈ 120 000
+WOV.rpNeed = v => (v.prem || WOV.STARTERS.includes(v.id) ? 0 : Math.round(380 * Math.pow(v.tier, 2.5) / 50) * 50);
 WOV.rpOf = v => P().rp[v.id] || 0;
 WOV.researched = v => WOV.owns(v.id) || WOV.rpOf(v) >= WOV.rpNeed(v);
 // can be researched now: previous tier of the same class owned
@@ -22,7 +23,7 @@ WOV.researchable = v => !WOV.owns(v.id) && !v.prem && (v.tier === 1 || WOV.VEHIC
 WOV.researchTarget = function (kind) {
   const p = P(), t = WOV.byId[p.resTarget[kind]];
   if (t && WOV.researchable(t) && !WOV.researched(t)) return t;
-  return WOV.VEHICLES.filter(v => v.kind === kind && WOV.researchable(v) && !WOV.researched(v)).sort((a, b) => a.tier - b.tier || WOV.rpNeed(a) - WOV.rpNeed(b))[0] || null;
+  return WOV.VEHICLES.filter(v => v.kind === kind && WOV.researchable(v) && !WOV.researched(v)).sort((a, b) => b.tier - a.tier || WOV.rpNeed(a) - WOV.rpNeed(b))[0] || null; // the highest open tier first: after buying a IV, research goes to V
 };
 // spend research points on the class's target (overflow flows to the next one); returns finished vehicles
 WOV.addResearch = function (kind, rp) {
@@ -72,7 +73,7 @@ WOV.battleStats = function (v) {
 };
 
 // ---------- repair after battle (premium vehicles repair for free) ----------
-WOV.repairCost = v => (v.prem ? 0 : 60 + v.tier * 110);
+WOV.repairCost = v => (v.prem ? 0 : 50 + v.tier * 90);
 
 // ---------- daily tasks ----------
 const TASKS = [
