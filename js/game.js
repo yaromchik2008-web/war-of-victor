@@ -164,6 +164,63 @@ function buildOnline(mode, match) {
   return { map, units, myTeam };
 }
 
+// ---------- assault: defenders hold a fortified base, attackers must capture it ----------
+function buildAssault(mode, map, pv, prof) {
+  const attT = WOV._forceAtt !== undefined ? WOV._forceAtt : Math.random() < 0.5 ? 0 : 1, defT = 1 - attT, S = map.size;
+  const base0 = map.findSpot("tank", defT, 110) || { x: map.spawnZones[defT], y: S / 2 };
+  const base = { x: base0.x, y: base0.y, r: 190 };
+  const toAtt = map.spawnZones[attT] > base.x ? 0 : Math.PI;
+  const forts = [];
+  for (let i = 0; i < 9; i++) {
+    const a = toAtt - 1.05 + i * (2.1 / 8), rr = base.r * (0.78 + (i % 2) * 0.12), x = base.x + Math.cos(a) * rr, y = base.y + Math.sin(a) * rr;
+    if (map.isWater(x, y) || map.pointInWalls(x, y)) continue;
+    const sand = i % 3 !== 1;
+    forts.push({ x, y, r: sand ? 15 : 17, sand, hp: sand ? 260 : 99999, a });
+  }
+  const names = CALLSIGNS.slice().sort(() => Math.random() - 0.5), units = [];
+  const comp = t => t === attT ? ["tank", "tank", "tank", "tank", "ship", "ship"] : ["tank", "tank", "tank", "ship"];
+  const nearBase = (kind, r) => {
+    if (kind === "ship") return map.findSpot("ship", defT, r);
+    for (let i = 0; i < 120; i++) { const a = rnd(0, TAU), d = rnd(40, base.r * 0.7), x = base.x + Math.cos(a) * d, y = base.y + Math.sin(a) * d; if (map.passable("tank", x, y, r + 6, toAtt) && !forts.some(f => Math.hypot(f.x - x, f.y - y) < f.r + r + 6)) return { x, y }; }
+    return map.findSpot(kind, defT, r);
+  };
+  const spot = (kind, team, r) => team === defT ? nearBase(kind, r) : map.findSpot(kind, team, r);
+  for (let team = 0; team < 2; team++) {
+    const list = comp(team);
+    if (team === 0) { list.splice(list.indexOf(pv.kind), 1); const pos = spot(pv.kind, 0, pv.r) || { x: map.spawnZones[0], y: S / 2 }; units.push(makeUnit(WOV.battleStats ? WOV.battleStats(pv) : pv, 0, pos, prof.name, true, WOV.camoOf(pv))); }
+    for (const k of list) { const v = pickBotVehicle(k, slotTier(pv.tier)), pos = spot(k, team, v.r); if (pos) units.push(makeUnit(v, team, pos, names.pop() || "Bot", false, null)); }
+  }
+  // two bunkers covering the approach
+  const bv = pickBotVehicle("tank", pv.tier);
+  for (const side of [-0.45, 0.45]) {
+    const a = toAtt + side, x = base.x + Math.cos(a) * base.r * 0.5, y = base.y + Math.sin(a) * base.r * 0.5;
+    const v = Object.assign({}, bv, { id: "dot", name: "ДОТ", hp: Math.round(bv.hp * 2.6), speed: 0, turn: 0, armor: [0.55, 0.65, 0.8], reload: +(bv.reload * 1.35).toFixed(2), dmg: Math.round(bv.dmg * 1.1), r: 18 });
+    const u = makeUnit(v, defT, { x, y }, "ДОТ", false, null); u.fixed = true; u.angle = u.tAngle = toAtt; units.push(u);
+  }
+  return { units, base, forts, attT };
+}
+function updateFixed(u, dt) {
+  let t = null, bd = u.v.shell * u.v.range * 0.8;
+  for (const o of B.units) if (!o.dead && o.team !== u.team && o.kind !== "plane") { const d = Math.hypot(o.x - u.x, o.y - u.y); if (d < bd && B.map.lineOfSight(u.x, u.y, o.x, o.y)) { bd = d; t = o; } }
+  if (!t) return;
+  const aim = Math.atan2(t.y - u.y, t.x - u.x);
+  u.tAngle = approachAng(u.tAngle, aim, 1.3 * dt);
+  if (u.cd <= 0 && Math.abs(angNorm(aim - u.tAngle)) < 0.06) fire(u);
+}
+function updateAssault(dt) {
+  const b = B, bs = b.base; let att = 0, def = 0, hitNow = false;
+  for (const u of b.units) {
+    if (u.dead || u.fixed || u.kind === "plane") continue;
+    const inside = (u.x - bs.x) ** 2 + (u.y - bs.y) ** 2 < bs.r * bs.r;
+    if (inside) { if (u.team === b.attT) { att++; if (u.taken > (u.lastTaken || 0) + 1) hitNow = true; } else def++; }
+    u.lastTaken = u.taken;
+  }
+  if (hitNow && b.cap > 0) { b.cap = Math.max(0, b.cap - 0.12); if (b.attT === 1) floatText(bs.x, bs.y - 30, "ЗАХОПЛЕННЯ ЗБИТО", "#d9a441"); }
+  b.capping = att > 0 && def === 0;
+  if (b.capping) b.cap = Math.min(1, b.cap + dt * Math.min(att, 3) / 60);
+  if (b.cap >= 1 && !b.over) finish(b.attT === 0 ? "win" : "lose");
+}
+
 function start(modeId, onEnd, match) {
   const mode = WOV.MODES[modeId], prof = WOV.profile, pv = WOV.currentVehicle();
   const online = match ? buildOnline(mode, match) : null;
@@ -172,11 +229,12 @@ function start(modeId, onEnd, match) {
   const kinds = n <= 4 ? ["tank", "tank", "plane", "ship"] : n === 5 ? ["tank", "tank", "tank", "plane", "ship"] : ["tank", "tank", "tank", "plane", "plane", "ship", "ship"];
   const names = CALLSIGNS.slice().sort(() => Math.random() - 0.5);
   const friendNames = prof.friends.map(f => f.name).sort(() => Math.random() - 0.5);
-  const units = online ? online.units : [];
+  const assault = mode.assault && !online ? buildAssault(mode, map, pv, prof) : null;
+  const units = online ? online.units : assault ? assault.units : [];
   // slot list: the player's slot first (enemy mirror of it gets the player's tier), then the rest with shared tiers
   const rest = kinds.slice(); rest.splice(rest.indexOf(pv.kind), 1);
   const slotTiers = rest.map(() => slotTier(pv.tier));
-  for (let team = 0; team < 2 && !online; team++) {
+  for (let team = 0; team < 2 && !online && !assault; team++) {
     if (team === 0) { const pos = map.findSpot(pv.kind, 0, pv.r) || { x: map.size * 0.1, y: map.size / 2 }; units.push(makeUnit(WOV.battleStats ? WOV.battleStats(pv) : pv, 0, pos, prof.name, true, WOV.camoOf(pv))); }
     const slots = team === 0 ? rest.map((k, i) => [k, slotTiers[i]]) : [[pv.kind, pv.tier]].concat(rest.map((k, i) => [k, slotTiers[i]]));
     for (const [k, tier] of slots) {
@@ -204,6 +262,10 @@ function start(modeId, onEnd, match) {
   if (WOV.Audio) WOV.Audio.music("battle");
   perf.n = 0; perf.acc = 0;
   B.alerts = [];
+  if (assault) {
+    Object.assign(B, { assault: true, base: assault.base, forts: assault.forts, attT: assault.attT, cap: 0 });
+    B.banner = { text: assault.attT === 0 ? "ТИ В АТАЦІ" : "ТИ В ОБОРОНІ", sub: assault.attT === 0 ? "Захопи базу або знищ усіх захисників" : "Не дай захопити базу 6 хвилин", t: 3 };
+  }
   B.ms = { firstBlood: 0, longKill: 0, planes: 0, strikeKills: 0 };
   const wr = match ? seeded(match.seed ^ 0x1234567) : Math.random, wsum = WOV.WEATHER.reduce((a, w) => a + w.w, 0);
   let wroll = wr() * wsum; B.weather = WOV.WEATHER.find(w => (wroll -= w.w) < 0) || WOV.WEATHER[0];
@@ -314,7 +376,7 @@ function netPacket(pk) {
       const d = Math.min(u.hp, e.d); u.hp -= d; u.taken += d; b.lastDmg = b.time; if (by) by.dmgDone += d;
       const fake = { small: !!e.sm, mod: e.m || 0.0001, fireK: e.fk || 1, owner: by || u };
       if (u.hp > 0.5) damageModule(u, fake, e.i || 0);
-      if (u.isPlayer) { floatText(u.x, u.y - u.r - 10, "-" + Math.round(d), "#ff8a70"); if (!e.sm) { WOV.haptic("heavy"); b.cam.shake = Math.max(b.cam.shake, 8); SFX("hit", { x: u.x, y: u.y }); } }
+      if (u.isPlayer) { if (by) hitFrom(by); floatText(u.x, u.y - u.r - 10, "-" + Math.round(d), "#ff8a70"); if (!e.sm) { WOV.haptic("heavy"); b.cam.shake = Math.max(b.cam.shake, 8); SFX("hit", { x: u.x, y: u.y }); } }
       if (u.hp <= 0.5) destroy(u, by);
     } else if (e.k === "k") destroy(u, by, true);
     else if (e.k === "c") { const c = b.crates.find(x => x.id === e.id); if (c) takeCrate(u, c, true); }
@@ -479,6 +541,12 @@ function updatePoints(dt) {
   }
 }
 function botPoint(u) {
+  if (B.assault) {
+    if (u.kind === "ship") return null;
+    const bs = B.base, d = Math.hypot(bs.x - u.x, bs.y - u.y);
+    if (u.team === B.attT) return { x: bs.x, y: bs.y, r: bs.r };
+    return d > bs.r + 120 ? { x: bs.x, y: bs.y, r: bs.r * 1.4 } : null;
+  }
   if (!B.points) return null;
   let best = null, bd = 1e9;
   for (const q of B.points) {
@@ -503,13 +571,14 @@ function fire(u, angOverride) {
   const v = u.v, m = WOV.muzzle(u), air = u.kind === "plane", A = ammoDef(u);
   if (A.rocket) return fireRocket(u, A);
   if (!air && B.map.pointInWalls(m.x, m.y)) { u.cd = v.reload * 0.4; return; }
-  const spread = air ? rnd(-0.035, 0.035) : u.isPlayer ? rnd(-0.015, 0.015) : rnd(-0.045, 0.045);
+  const spread = air ? rnd(-0.035, 0.035) : u.isPlayer ? (Math.random() + Math.random() - 1) * (u.aim || 0.02) : rnd(-0.045, 0.045);
   const a = (angOverride !== undefined ? angOverride : m.a) + spread;
   const sp = v.shell * (A.speed || 1) + (air ? u.vel : 0);
   B.shells.push({ x: m.x, y: m.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, team: u.team, dmg: v.dmg * (A.dmg || 1), life: v.range / (A.speed || 1), owner: u, air, small: air,
     pen: A.pen || 0, splash: A.splash || 0, mod: A.mod || 1, fireK: A.fire || 1, noRico: !!A.noRico, rico: A.rico !== undefined ? A.rico : 1, col: A.col });
   netShot(u); consume(u, A);
   u.cd = u.S.reload * (u.isPlayer ? 1 : air ? 1.5 : 1.35); u.flash = air ? 0.04 : 0.09;
+  if (u.isPlayer && !air) u.aim = Math.min(0.2, (u.aim || 0) + 0.075); // the gun kicks, the circle opens again
   if (!air) SFX("cannon", { x: m.x, y: m.y, k: clamp((v.dmg - 30) / 300, 0, 1), vol: u.isPlayer ? 1 : 0.8 });
   else SFX("mg", { x: m.x, y: m.y, vol: u.isPlayer ? 0.7 : 0.5 });
   if (!air) {
@@ -526,7 +595,7 @@ function autoAA(u, dt) {
   if (!tgt) return;
   const sp = 820, tt = bd / sp, lx = tgt.x + Math.cos(tgt.angle) * tgt.vel * tt, ly = tgt.y + Math.sin(tgt.angle) * tgt.vel * tt;
   const a = Math.atan2(ly - u.y, lx - u.x) + rnd(-0.13, 0.13);
-  B.shells.push({ x: u.x, y: u.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, team: u.team, dmg: A.dmg * (u.isPlayer ? 1 : 0.7), life: A.range / sp + 0.05, owner: u, air: true, small: true, aa: true });
+  B.shells.push({ x: u.x, y: u.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, team: u.team, dmg: A.dmg * (u.isPlayer ? 1.3 : 0.95), life: A.range / sp + 0.05, owner: u, air: true, small: true, aa: true });
   u.aaCd = A.reload * (u.isPlayer ? 1 : 1.4);
   SFX("aa", { x: u.x, y: u.y, vol: 0.45 });
 }
@@ -614,13 +683,18 @@ function hit(s, t) {
   const impact = Math.atan2(s.y - t.y, s.x - t.x);
   let mult = 1, zone = 1;
   if (t.kind !== "plane") {
-    if (s.owner.kind === "plane") mult = s.rocket ? 1 : 0.75; // strafing from above
+    if (s.owner.kind === "plane") mult = s.rocket ? 0.55 : t.kind === "ship" ? 0.4 : 0.3; // strafing from above barely scratches armour
     else {
       const rel = Math.abs(angNorm(impact - t.angle));
       zone = rel < Math.PI / 4 ? 0 : rel > 3 * Math.PI / 4 ? 2 : 1;
       mult = t.v.armor[zone];
       if (s.pen > 0 && mult < 1) mult += (1 - mult) * s.pen;
       else if (s.pen < 0) mult *= 1 + s.pen * (mult < 1 ? 1.4 : 0.4);
+      if (zone === 0 && s.pen >= 0 && mult < 0.62 && Math.random() < (0.62 - mult) * 1.6) {
+        floatText(t.x, t.y - t.r - 10, "НЕ ПРОБИВ", "#cfcab8"); SFX("ricochet", { x: t.x, y: t.y, vol: 0.7 });
+        s.life = 0; spark(s.x, s.y, "#e8e4d8", 8);
+        if (t.isPlayer) hitFrom(s.owner); return;
+      }
       const inc = Math.abs(angNorm(Math.atan2(-s.vy, -s.vx) - impact));
       if (!s.noRico && inc > 1.15 && Math.random() < 0.7 * (s.rico !== undefined ? s.rico : 1)) {
         floatText(t.x, t.y - t.r - 10, "РИКОШЕТ", "#cfcab8"); SFX("ricochet", { x: t.x, y: t.y });
@@ -643,9 +717,16 @@ function hit(s, t) {
     if (mine || me) floatText(t.x, t.y - t.r - 10, (zone === 2 ? "КОРМА " : zone === 0 ? "" : "БОРТ ") + "-" + Math.round(dmg), me ? "#ff8a70" : "#ffe29a");
     spark(s.x, s.y, "#f0a050", 12); SFX("hit", { x: t.x, y: t.y, vol: me || mine ? 1 : 0.7 });
   }
+  if (me) hitFrom(s.owner);
   if (me) { if (!s.small || Math.random() < 0.25) WOV.haptic(s.small ? "light" : "heavy"); B.cam.shake = Math.max(B.cam.shake, s.small ? 2 : 8); }
   if (mine && !s.small) WOV.haptic("rigid");
   if (t.hp <= 0.5 && !t.remote) destroy(t, s.owner);
+}
+function hitFrom(o) {
+  if (!o || !B.player) return;
+  const a = Math.atan2(o.y - B.player.y, o.x - B.player.x), old = (B.hitDirs || []).find(h => Math.abs(angNorm(h.a - a)) < 0.3);
+  B.hitDirs = B.hitDirs || [];
+  if (old) { old.a = a; old.t = 1.6; } else B.hitDirs.push({ a, t: 1.6 });
 }
 function destroy(t, by, fromNet) {
   if (t.dead) return;
@@ -712,6 +793,15 @@ function fly(u, dt, dir, mag) {
 }
 const canGunHit = () => true; // every main gun can hit planes now (tanks and ships too), it is just harder
 // nearest enemy the gun can reach (with lead), as an angle; null if nobody is in range
+function autoTargetUnit(p) {
+  let best = null, bd = p.v.shell * p.v.range;
+  for (const e of B.units) {
+    if (e.dead || e.team === p.team || e.kind === "plane" || e.spotted === false) continue;
+    const off = Math.abs(angNorm(Math.atan2(e.y - p.y, e.x - p.x) - p.tAngle)); if (off > 0.25) continue;
+    const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
 function autoTarget(p) {
   let best = null, bd = p.v.shell * p.v.range * 0.95;
   for (const e of B.units) {
@@ -737,6 +827,7 @@ function aimAssist(p, aim, cone) {
   return Math.atan2(bt.y + Math.sin(bt.angle) * bt.vel * tt - p.y, bt.x + Math.cos(bt.angle) * bt.vel * tt - p.x);
 }
 
+const AIM_MIN = { tank: 0.012, ship: 0.016, plane: 0 }, AIM_TIME = { tank: 0.65, ship: 0.8, plane: 1 };
 function updatePlayer(dt) {
   const p = B.player, v = p.S, cam = B.cam;
   const anyKey = keys.KeyW || keys.ArrowUp || keys.KeyS || keys.ArrowDown || keys.KeyA || keys.ArrowLeft || keys.KeyD || keys.ArrowRight;
@@ -768,8 +859,16 @@ function updatePlayer(dt) {
   else if (!usingTouch && mouse.active) aim = Math.atan2(mouse.y + cam.y - p.y, mouse.x + cam.x - p.x);
   else if (usingTouch) { const t = autoTarget(p); if (t) aim = t; } // touch: the turret follows the nearest enemy by itself
   p.autoAim = usingTouch && !manual && aim !== null;
+  const prevT = p.tAngle, prevA = p.angle;
   if (aim !== null) { aim = aimAssist(p, aim, 0.22); p.tAngle = approachAng(p.tAngle, aim, v.tturn * dt); }
   else p.tAngle = approachAng(p.tAngle, p.angle, v.tturn * dt * 0.3);
+  // aiming circle: opens while moving or turning, closes over ~2 s when the vehicle stands still
+  const base = AIM_MIN[p.kind] * (1 - 0.04 * (WOV.crewLvl ? WOV.crewLvl(p.kind, "aim") : 0));
+  const turnRate = Math.abs(angNorm(p.tAngle - prevT)) / Math.max(dt, 1e-3) + Math.abs(angNorm(p.angle - prevA)) / Math.max(dt, 1e-3);
+  const goal = base + 0.085 * Math.min(1, Math.abs(p.vel) / p.v.speed) + 0.05 * Math.min(1, turnRate / 2.5) + (p.mods.gun || p.mods.battery || p.mods.turret ? 0.03 : 0);
+  if (p.aim === undefined) p.aim = 0.12;
+  p.aim = p.aim < goal ? p.aim + (goal - p.aim) * Math.min(1, dt * 7) : goal + (p.aim - goal) * Math.exp(-dt / AIM_TIME[p.kind]);
+  p.aimBase = base; p.aimAt = aim;
   if (want && p.cd <= 0 && (fireBtn.id !== null || aim === null || Math.abs(angNorm(aim - p.tAngle)) < 0.25)) fire(p);
 }
 
@@ -884,18 +983,23 @@ function update(dt) {
   if (b.net) { b.net.own = (b.net.own || 0) - dt; if (b.net.own <= 0) { b.net.own = 1; netOwners(); } }
   for (const u of b.units) { u.cd -= dt; u.flash -= dt; u.bumped = false; if (!u.dead) { if (u.remote) u.S = effective(u); else updateModules(u, dt); } else u.S = u.S || effective(u); }
   for (const a of b.alerts) a.t -= dt;
+  if (b.hitDirs) { for (const h of b.hitDirs) h.t -= dt; b.hitDirs = b.hitDirs.filter(h => h.t > 0); }
   b.alerts = b.alerts.filter(a => a.t > 0);
   b.map.updateTrees(dt);
-  for (const u of b.units) if (!u.dead && u.kind === "tank") tankGround(u, dt);
+  for (const u of b.units) if (!u.dead && u.kind === "tank" && !u.fixed) tankGround(u, dt);
   const p = b.player;
   if (!p.dead) updatePlayer(dt);
-  for (const u of b.units) if (!u.dead && !u.isPlayer) { if (u.remote) netMove(u, dt); else updateBot(u, dt); }
+  for (const u of b.units) if (!u.dead && !u.isPlayer) { if (u.remote) netMove(u, dt); else if (u.fixed) updateFixed(u, dt); else updateBot(u, dt); }
   for (const u of b.units) if (!u.dead && !u.remote) autoAA(u, dt);
   // surface units push each other apart
   for (let i = 0; i < b.units.length; i++) for (let j = i + 1; j < b.units.length; j++) {
     const a = b.units[i], c = b.units[j]; if (a.dead || c.dead || a.kind === "plane" || c.kind === "plane") continue;
     const dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy), m = a.r + c.r;
-    if (d < m && d > 0) { const k = (m - d) / 2 / d; a.x -= dx * k; a.y -= dy * k; c.x += dx * k; c.y += dy * k; }
+    if (d < m && d > 0) { const k = (m - d) / 2 / d, ka = a.fixed ? 0 : c.fixed ? 2 : 1, kc = c.fixed ? 0 : a.fixed ? 2 : 1; a.x -= dx * k * ka; a.y -= dy * k * ka; c.x += dx * k * kc; c.y += dy * k * kc; }
+  }
+  if (b.forts) for (const u of b.units) if (!u.dead && u.kind !== "plane" && !u.fixed) for (const f of b.forts) {
+    if (f.hp <= 0) continue; const dx = u.x - f.x, dy = u.y - f.y, d = Math.hypot(dx, dy), m = u.r * 0.8 + f.r;
+    if (d < m && d > 0) { u.x = f.x + dx / d * m; u.y = f.y + dy / d * m; u.vel *= 0.6; u.bumped = true; }
   }
   for (const u of b.units) if (!u.dead && u.kind !== "plane") {
     if (!u.isPlayer && !u.remote) { if (u.bumped || Math.abs(u.vel) < 6) u.ai.stuck += dt; else u.ai.stuck = Math.max(0, u.ai.stuck - dt); }
@@ -912,6 +1016,7 @@ function update(dt) {
       s.x += s.vx * dt / steps; s.y += s.vy * dt / steps;
       if (!s.air && b.map.pointInWalls(s.x, s.y)) { s.life = 0; spark(s.x, s.y, "#bdb6a0", 8); break; }
       if (!s.small) { let hitTree = false; for (const tr of b.map.treesNear(s.x, s.y)) if (tr.alive && !tr.fall && (tr.x - s.x) ** 2 + (tr.y - s.y) ** 2 < tr.r * tr.r * 0.5) { b.map.knockTree(tr, Math.atan2(s.vy, s.vx)); SFX("tree", { x: tr.x, y: tr.y }); s.life = 0; spark(s.x, s.y, "#56783e", 10); hitTree = true; break; } if (hitTree) break; }
+      if (b.forts && !s.air) { let hf = false; for (const f of b.forts) if (f.hp > 0 && (f.x - s.x) ** 2 + (f.y - s.y) ** 2 < f.r * f.r) { s.life = 0; hf = true; spark(s.x, s.y, f.sand ? "#c8b07a" : "#bdbdb5", 9); if (f.sand) { f.hp -= s.dmg * 0.6; if (f.hp <= 0) { spark(f.x, f.y, "#c8b07a", 22, 160); SFX("tree", { x: f.x, y: f.y }); } } break; } if (hf) break; }
       for (const t of b.units) {
         if (t.dead || t.team === s.team || t === s.owner) continue;
         if (s.aa && t.kind !== "plane") continue;
@@ -938,6 +1043,7 @@ function update(dt) {
   if (b.ammoNote) { b.ammoNote.t -= dt; if (b.ammoNote.t <= 0) b.ammoNote = null; }
   if (b.killcam) b.killcam.t -= dt;
   if (!b.over) updatePoints(dt);
+  if (b.assault && !b.over) updateAssault(dt);
   updateCrates(dt); updateStrikes(dt); updateSpotting();
   if (b.rain) for (const d of b.rain) { d.y += d.v * dt; d.x -= d.v * 0.25 * dt; if (d.y > H) { d.y = -20; d.x = Math.random() * (W + 100); } }
   for (const u of b.units) for (const k in u.buff) { u.buff[k] -= dt; if (u.buff[k] <= 0) delete u.buff[k]; }
@@ -952,12 +1058,13 @@ function update(dt) {
   b.cam.shake *= Math.max(0, 1 - dt * 8);
   // end conditions
   if (!b.over) {
-    const a0 = b.units.filter(u => u.team === 0 && !u.dead).length, a1 = b.units.filter(u => u.team === 1 && !u.dead).length;
+    const a0 = b.units.filter(u => u.team === 0 && !u.dead && !u.fixed).length, a1 = b.units.filter(u => u.team === 1 && !u.dead && !u.fixed).length;
     let result = null;
     if (a1 === 0) result = "win"; else if (a0 === 0) result = "lose";
     else if (b.tickets && b.tickets[1] <= 0) result = "win"; else if (b.tickets && b.tickets[0] <= 0) result = "lose";
     else if (b.tickets && b.time <= 0) result = b.tickets[0] >= b.tickets[1] ? "win" : "lose";
     else if (b.net && !isHost()) result = null; // the host decides timeouts and stalemates
+    else if (b.assault) result = b.time <= 0 ? (b.attT === 0 ? "lose" : "win") : null;
     else if (b.time <= 0 || (b.lastDmg !== undefined ? b.lastDmg : b.mode.time) - b.time > 30) {
       const hpOf = t => b.units.filter(u => u.team === t).reduce((s, u) => s + Math.max(0, u.hp) / u.maxHp, 0);
       result = hpOf(0) >= hpOf(1) ? "win" : "lose";
@@ -984,7 +1091,7 @@ function finish(result, fromNet) {
   for (const r of WOV.RANKS) if (r.i > before && prof.xp >= r.xp) { rankUp = r; prof.coins += r.reward.coins; prof.crystals += r.reward.crystals; }
   prof.stats.battles++; if (result === "win") prof.stats.wins++; prof.stats.kills += p.kills; prof.stats.dmg += Math.round(p.dmgDone);
   WOV.save(); WOV.emit("wallet");
-  const summary = { rankUp, repair, caps: p.caps || 0, vehicleId: (p.v.base || p.v).id, result, kills: p.kills, dmg: Math.round(p.dmgDone), coins, xp, boosted, survived: !p.dead, mode: b.mode.name + (b.net ? " · онлайн" : ""), online: !!b.net,
+  const summary = { rankUp, repair, caps: p.caps || 0, vehicleId: (p.v.base || p.v).id, result, kills: p.kills, dmg: Math.round(p.dmgDone), coins, xp, boosted, survived: !p.dead, mode: b.mode.name + (b.net ? " · онлайн" : "") + (b.assault ? (b.attT === 0 ? " · атака" : " · оборона") : ""), online: !!b.net,
     board: b.units.slice().sort((x, y) => y.kills - x.kills || y.dmgDone - x.dmgDone).map(u => ({ name: u.name, team: u.team, v: u.v.name, kills: u.kills, dmg: Math.round(u.dmgDone), dead: !!u.dead, me: u.isPlayer, human: !!u.human })) };
   const best = b.units.slice().sort((x, y) => y.kills - x.kills || y.dmgDone - x.dmgDone)[0];
   summary.medalStats = { firstBlood: b.ms.firstBlood === 1, longKill: b.ms.longKill, planes: b.ms.planes, strikeKills: b.ms.strikeKills, taken: Math.round(p.taken), maxHp: p.maxHp,
@@ -1028,8 +1135,31 @@ function render() {
   for (const w of b.wrecks) if (vis(w.x, w.y, 80)) { ctx.globalAlpha = 0.9; WOV.drawVehicle(ctx, w.v, w.x, w.y, w.a, w.ta, { wreck: true }); }
   ctx.globalAlpha = 1;
   for (const c of b.crates) if (vis(c.x, c.y, 80)) drawCrate(c);
+  if (b.assault) {
+    const bs = b.base, col = b.attT === 0 ? "224,96,74" : "217,164,65";
+    ctx.fillStyle = "rgba(" + col + ",.08)"; ctx.beginPath(); ctx.arc(bs.x, bs.y, bs.r, 0, TAU); ctx.fill();
+    ctx.setLineDash([12, 8]); ctx.strokeStyle = "rgba(" + col + ",.65)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(bs.x, bs.y, bs.r, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    if (b.cap > 0) { ctx.strokeStyle = b.attT === 0 ? "#d9a441" : "#e0604a"; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(bs.x, bs.y, bs.r - 7, -Math.PI / 2, -Math.PI / 2 + TAU * b.cap); ctx.stroke(); }
+    ctx.strokeStyle = "#3a3328"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bs.x, bs.y + 14); ctx.lineTo(bs.x, bs.y - 30); ctx.stroke();
+    ctx.fillStyle = "rgb(" + col + ")"; ctx.beginPath(); ctx.moveTo(bs.x, bs.y - 30); ctx.lineTo(bs.x + 24, bs.y - 23); ctx.lineTo(bs.x, bs.y - 16); ctx.fill();
+    for (const f of b.forts) if (f.hp > 0 && vis(f.x, f.y, 30)) {
+      if (f.sand) { ctx.fillStyle = "#a8915e"; for (let i = -1; i <= 1; i++) { const ox = Math.cos(f.a + Math.PI / 2) * i * 9, oy = Math.sin(f.a + Math.PI / 2) * i * 9; ctx.beginPath(); ctx.ellipse(f.x + ox, f.y + oy, 8, 6, f.a, 0, TAU); ctx.fill(); } ctx.strokeStyle = "rgba(60,48,28,.6)"; ctx.lineWidth = 1; ctx.stroke(); }
+      else { ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.a); ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(-10, -13, 24, 30); ctx.fillStyle = "#8d8f88"; ctx.fillRect(-12, -15, 24, 30); ctx.strokeStyle = "#5e605a"; ctx.lineWidth = 2; ctx.strokeRect(-12, -15, 24, 30); ctx.restore(); }
+    }
+  }
   map.drawTreeShadows(ctx, sx, sy, W, H);
   const drawU = (u) => {
+    if (u.fixed) {
+      ctx.save(); ctx.translate(u.x, u.y);
+      ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.arc(3, 4, 21, 0, TAU); ctx.fill();
+      ctx.fillStyle = "#7b7d74"; ctx.beginPath(); ctx.arc(0, 0, 20, 0, TAU); ctx.fill(); ctx.strokeStyle = "#55574f"; ctx.lineWidth = 3; ctx.stroke();
+      ctx.rotate(u.tAngle); ctx.fillStyle = "#3d3f39"; ctx.fillRect(4, -3, 26, 6); ctx.fillStyle = "#2a2b27"; ctx.fillRect(8, -7, 8, 14);
+      ctx.restore();
+      if (u.flash > 0) { ctx.fillStyle = "#ffdf8a"; ctx.beginPath(); ctx.arc(u.x + Math.cos(u.tAngle) * 32, u.y + Math.sin(u.tAngle) * 32, 7, 0, TAU); ctx.fill(); }
+      const w = 34, yy = u.y - 32; ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(u.x - w / 2, yy, w, 4); ctx.fillStyle = TEAM_COL[u.team]; ctx.fillRect(u.x - w / 2, yy, w * clamp(u.hp / u.maxHp, 0, 1), 4);
+      ctx.font = "700 10px system-ui"; ctx.textAlign = "center"; ctx.fillStyle = u.team === 0 ? "rgba(240,220,160,.9)" : "rgba(255,170,150,.9)"; ctx.fillText("ДОТ", u.x, yy - 3);
+      return;
+    }
     if (u.kind === "tank" && u.wet) { ctx.strokeStyle = "rgba(220,240,240,.45)"; ctx.lineWidth = 2; const k = (performance.now() / 600) % 1; ctx.beginPath(); ctx.ellipse(u.x, u.y, u.r * (1.3 + k * 0.6), u.r * (1.1 + k * 0.5), u.angle, 0, TAU); ctx.stroke(); }
     WOV.drawVehicle(ctx, u.v, u.x, u.y, u.angle, u.tAngle, { camo: u.camo, flash: u.flash, track: u.track, bank: u.bank, team: u.team === 0 ? "ally" : "enemy" });
     if (!u.isPlayer) {
@@ -1064,9 +1194,24 @@ function render() {
     ctx.strokeStyle = "rgba(240,211,138,.22)"; ctx.setLineDash([6, 9]); ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + Math.cos(ang) * len, p.y + Math.sin(ang) * len); ctx.stroke(); ctx.setLineDash([]);
     ctx.strokeStyle = "rgba(217,164,65,.5)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, p.r + (p.kind === "ship" ? p.r * 0.9 : 8), 0, TAU); ctx.stroke();
+    if (p.kind !== "plane" && p.aim !== undefined) {
+      const t = autoTargetUnit(p), d = t ? Math.hypot(t.x - p.x, t.y - p.y) : Math.min(len * 0.6, Math.min(W, H) * 0.42);
+      const cx = p.x + Math.cos(p.tAngle) * d, cy = p.y + Math.sin(p.tAngle) * d, rr = Math.max(9, d * Math.tan(p.aim) * 0.85);
+      const ready = p.aim < p.aimBase * 1.6, col = ready ? "#7fdc6b" : p.aim < 0.06 ? "#f3cf7a" : "#ff8a60";
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * (rr + 2), cy + Math.sin(a) * (rr + 2)); ctx.lineTo(cx + Math.cos(a) * (rr + 8), cy + Math.sin(a) * (rr + 8)); ctx.stroke(); }
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 1.8, 0, TAU); ctx.fill();
+      if (ready) { ctx.font = "800 9px system-ui"; ctx.textAlign = "center"; ctx.fillText("ЗВЕДЕНО", cx, cy + rr + 18); }
+      ctx.globalAlpha = 1;
+    }
   }
   ctx.restore();
   drawWeather();
+  if (b.hitDirs && b.hitDirs.length) {
+    const px = p.x - sx, py = p.y - sy, R = Math.min(W, H) * 0.22;
+    for (const h of b.hitDirs) { ctx.globalAlpha = clamp(h.t, 0, 1) * 0.85; ctx.strokeStyle = "#ff3b2a"; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(px, py, R, h.a - 0.28, h.a + 0.28); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+  }
   // edge arrows for off-screen enemies
   for (const u of b.units) if (!u.dead && u.team === 1 && u.spotted !== false && !vis(u.x, u.y, 0)) {
     const cx = W / 2, cy = H / 2, a = Math.atan2(u.y - (sy + cy), u.x - (sx + cx));
@@ -1080,8 +1225,15 @@ function render() {
 function drawHUD() {
   const b = B, p = b.player, tg = WOV.tg;
   const top = 10 + ((tg && tg.safeAreaInset && tg.safeAreaInset.top) || 0) + ((tg && tg.contentSafeAreaInset && tg.contentSafeAreaInset.top) || 0);
+  if (b.assault && (b.cap > 0 || b.capping)) {
+    const w = 190, x = W / 2 - w / 2, y = Math.max(top + 110, H * 0.17), att = b.attT === 0;
+    ctx.fillStyle = "rgba(10,14,13,.7)"; WOV.rr(ctx, x, y, w, 22, 7); ctx.fill();
+    ctx.fillStyle = att ? "#d9a441" : "#e0604a"; WOV.rr(ctx, x + 2, y + 2, Math.max(0, (w - 4) * b.cap), 18, 6); ctx.fill();
+    ctx.fillStyle = "#f2efe6"; ctx.font = "800 11px system-ui"; ctx.textAlign = "center";
+    ctx.fillText((att ? "ЗАХОПЛЮЄМО БАЗУ " : "БАЗУ ЗАХОПЛЮЮТЬ! ") + Math.round(b.cap * 100) + "%", W / 2, y + 15);
+  }
   // team score + timer
-  const a0 = b.units.filter(u => u.team === 0 && !u.dead).length, a1 = b.units.filter(u => u.team === 1 && !u.dead).length;
+  const a0 = b.units.filter(u => u.team === 0 && !u.dead && !u.fixed).length, a1 = b.units.filter(u => u.team === 1 && !u.dead && !u.fixed).length;
   const tm = Math.max(0, Math.ceil(b.time)), ts = Math.floor(tm / 60) + ":" + String(tm % 60).padStart(2, "0");
   ctx.fillStyle = "rgba(10,14,13,.6)"; WOV.rr(ctx, W / 2 - 74, top, 148, 34, 10); ctx.fill();
   ctx.font = "800 18px system-ui, sans-serif"; ctx.textAlign = "center";
@@ -1155,6 +1307,7 @@ function drawHUD() {
     else if (u.kind === "ship") ctx.fillRect(ux - 3, uy - 1.5, 6, 3);
     else ctx.fillRect(ux - 2, uy - 2, 4, 4);
   }
+  if (b.assault) { ctx.strokeStyle = b.attT === 0 ? "#e0604a" : "#d9a441"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(mx + b.base.x * k, my + b.base.y * k, Math.max(4, b.base.r * k), 0, TAU); ctx.stroke(); }
   if (b.points) for (const q of b.points) { ctx.strokeStyle = q.owner === 0 ? "#d9a441" : q.owner === 1 ? "#e0604a" : "#fff"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(mx + q.x * k, my + q.y * k, 4, 0, TAU); ctx.stroke(); }
   // banner
   if (b.banner) {

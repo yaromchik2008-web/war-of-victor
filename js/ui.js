@@ -120,7 +120,7 @@ function renderHangar() {
   }
   const shopCamo = el("button", "camo", '<span style="display:grid;place-items:center;color:var(--muted);font-size:20px">+</span>'); shopCamo.onclick = () => setTab("shop"); cs.appendChild(shopCamo);
   const ms = $("#modes"); ms.innerHTML = "";
-  for (const id of ["quick", "conquest", "team"]) {
+  for (const id of ["quick", "conquest", "assault", "team"]) {
     const m = WOV.MODES[id], b = el("button", "mode" + (mode === id ? " sel" : ""), "<b>" + m.name + "</b><small>" + m.desc + "</small>");
     b.onclick = () => { mode = id; renderHangar(); WOV.haptic("select"); }; ms.appendChild(b);
   }
@@ -572,6 +572,7 @@ function launch(match) {
 }
 let mmCancel = null;
 function startBattle() {
+  if (WOV.MODES[mode].assault && WOV.currentVehicle().kind === "plane") { toast("У «Штурмі» воюють лише танки й кораблі. Обери танк або корабель", 3000); WOV.haptic("error"); return; }
   WOV.haptic("heavy");
   if (mode !== "quick" || !WOV.Net || !WOV.Net.enabled()) return launch();
   // quick battle: look for real players first, fill the rest with bots

@@ -106,7 +106,7 @@ input { font: inherit; }
 .camo span { position: absolute; inset: 0; }
 
 .battle-box { position: sticky; bottom: 0; margin: 18px -14px -24px; padding: 12px 14px 14px; background: linear-gradient(180deg, transparent, rgba(14,18,17,.96) 22%); }
-.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+.modes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px; }
 .mode { text-align: left; padding: 8px 9px; border-radius: 12px; background: var(--panel); border: 2px solid transparent; }
 .mode.sel { border-color: var(--accent); background: var(--panel2); }
 .mode b { display: block; font-size: 13px; }
