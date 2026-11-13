@@ -771,7 +771,10 @@ document.addEventListener("click", e => { if (A && e.target.closest("#app button
 if (tg) {
   try { tg.ready(); tg.expand(); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); tg.setHeaderColor("#121615"); tg.setBackgroundColor("#121615"); tg.setBottomBarColor && tg.setBottomBarColor("#121615"); } catch (e) {}
   // whole screen without Telegram's header (Bot API 8.0+, phones only); older apps simply stay expanded
-  try { const mobile = /android|ios/.test(tg.platform || ""); if (mobile && tg.requestFullscreen && tg.isVersionAtLeast && tg.isVersionAtLeast("8.0") && !tg.isFullscreen) tg.requestFullscreen(); } catch (e) {}
+  const goFull = () => { try { if (!/tdesktop|macos|web/.test(tg.platform || "") && tg.requestFullscreen && (!tg.isVersionAtLeast || tg.isVersionAtLeast("8.0")) && !tg.isFullscreen) tg.requestFullscreen(); } catch (e) {} };
+  goFull();
+  // some clients only allow it after the first tap
+  document.addEventListener("pointerdown", function once() { document.removeEventListener("pointerdown", once, true); setTimeout(goFull, 50); }, true);
 }
 WOV.load(() => {
   renderWallet(); renderSound();
