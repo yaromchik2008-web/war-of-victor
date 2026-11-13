@@ -15,7 +15,7 @@ const TEAM_COL = ["#d9a441", "#e0604a"];
 const cv = document.getElementById("game"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1, lowFx = false;
 // orientation setting: "auto" follows the phone; "landscape"/"portrait" turn the battle picture by 90° when the phone is held the other way
-let ROT = false;
+let ROT = false, PADL = 0;
 let B = null; // current battle
 function wantRotate() {
   const o = WOV.profile && WOV.profile.orient, tall = window.innerHeight > window.innerWidth;
@@ -25,21 +25,27 @@ function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, lowFx ? 1 : 1.5);
   const sw = window.innerWidth, sh = window.innerHeight;
   ROT = wantRotate();
-  W = ROT ? sh : sw; H = ROT ? sw : sh;
+  // landscape full screen: keep the picture out of the notch / rounded corners on the sides
+  const tg = WOV.tg, si = (tg && tg.safeAreaInset) || {};
+  PADL = ROT ? 0 : si.left || 0; const padR = ROT ? 0 : si.right || 0;
+  W = ROT ? sh : sw - PADL - padR; H = ROT ? sw : sh;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const ui = document.getElementById("battleUi");
+  cv.style.left = !ROT && PADL ? PADL + "px" : ""; cv.style.right = !ROT && padR ? padR + "px" : "";
+  cv.style.width = !ROT && (PADL || padR) ? W + "px" : "";
   for (const el of [cv, ui]) {
     if (!el) continue;
+    if (el === cv && !ROT && (PADL || padR)) { el.classList.remove("rot"); el.style.transform = ""; el.style.height = ""; continue; }
     el.classList.toggle("rot", ROT);
     el.style.width = ROT ? sh + "px" : ""; el.style.height = ROT ? sw + "px" : "";
     el.style.transform = ROT ? "translateX(" + sw + "px) rotate(90deg)" : "";
   }
 }
 // screen point -> point on the (possibly turned) battle picture
-const pt = (x, y) => (ROT ? { x: y, y: window.innerWidth - x } : { x, y });
+const pt = (x, y) => (ROT ? { x: y, y: window.innerWidth - x } : { x: x - PADL, y });
 window.addEventListener("resize", resize); resize();
-if (WOV.tg) WOV.tg.onEvent("viewportChanged", resize);
+if (WOV.tg) for (const ev of ["viewportChanged", "safeAreaChanged", "contentSafeAreaChanged", "fullscreenChanged"]) { try { WOV.tg.onEvent(ev, resize); } catch (e) {} }
 
 // ---------- input ----------
 const keys = {};

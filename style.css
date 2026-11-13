@@ -3,7 +3,11 @@
   --bg: #121615; --bg2: #1a201e; --panel: #222a27; --panel2: #2a3330; --line: rgba(255,255,255,.07);
   --ink: #ece7da; --muted: #98a096; --accent: #e0ac45; --accent2: #f3cf7a; --good: #7fbf6b; --bad: #e0604a;
   --crystal: #6fc3f0; --purple: #a27be0;
-  --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Telegram full screen: the phone's own insets plus Telegram's close/menu buttons (content safe area), set by telegram-web-app.js */
+  --safe-top: max(env(safe-area-inset-top, 0px), calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)));
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), calc(var(--tg-safe-area-inset-bottom, 0px) + var(--tg-content-safe-area-inset-bottom, 0px)));
+  --safe-left: max(env(safe-area-inset-left, 0px), var(--tg-safe-area-inset-left, 0px));
+  --safe-right: max(env(safe-area-inset-right, 0px), var(--tg-safe-area-inset-right, 0px));
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
@@ -13,7 +17,7 @@ input { font: inherit; }
 .hidden { display: none !important; }
 
 #game { position: fixed; inset: 0; width: 100%; height: 100%; display: none; touch-action: none; z-index: 1; }
-#battleUi { position: fixed; z-index: 2; left: 10px; top: calc(10px + var(--safe-top)); }
+#battleUi { position: fixed; z-index: 2; left: calc(10px + var(--safe-left)); top: calc(10px + var(--safe-top)); }
 /* battle turned by 90° (orientation setting): the script sets size and transform */
 #game.rot { inset: auto; left: 0; top: 0; transform-origin: 0 0; }
 #battleUi.rot { left: 0; top: 0; padding: 10px; box-sizing: border-box; transform-origin: 0 0; pointer-events: none; }
@@ -30,7 +34,7 @@ input { font: inherit; }
 .icon-btn { width: 36px; height: 34px; border-radius: 10px; background: rgba(10,14,13,.6); color: var(--ink); font-size: 16px; font-weight: 700; }
 
 /* ---------- app shell ---------- */
-#app { position: fixed; inset: 0; display: flex; flex-direction: column; z-index: 3;
+#app { position: fixed; inset: 0; padding-left: var(--safe-left); padding-right: var(--safe-right); display: flex; flex-direction: column; z-index: 3;
   background: radial-gradient(120% 60% at 50% 0%, #26312c 0%, var(--bg) 60%); }
 #app.in-battle { display: none; }
 .splash { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
